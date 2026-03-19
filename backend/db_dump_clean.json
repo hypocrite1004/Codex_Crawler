@@ -1,0 +1,150 @@
+[
+{
+    "model": "auth.user",
+    "fields": {
+        "password": "pbkdf2_sha256$1000000$E6u0mJJbPa8i7UO5AjIgF2$0oG4vduAkJuNO9aGxC/T5PlGn8y2sebrimS8jUNNcv4=",
+        "last_login": null,
+        "is_superuser": false,
+        "username": "test",
+        "first_name": "",
+        "last_name": "",
+        "email": "test@test.com",
+        "is_staff": false,
+        "is_active": true,
+        "date_joined": "2026-02-23T06:15:39.701Z",
+        "groups": [],
+        "user_permissions": []
+    }
+},
+{
+    "model": "auth.user",
+    "fields": {
+        "password": "pbkdf2_sha256$1000000$89ydIsIknwVZvhY4Db5nja$jTNzmLjCjkLEDa9wtiwms1dhOyO4HRujwWxC7ZBcIwQ=",
+        "last_login": "2026-02-23T06:17:30.317Z",
+        "is_superuser": true,
+        "username": "admin",
+        "first_name": "",
+        "last_name": "",
+        "email": "admin@admin.com",
+        "is_staff": true,
+        "is_active": true,
+        "date_joined": "2026-02-23T06:17:25.653Z",
+        "groups": [],
+        "user_permissions": []
+    }
+},
+{
+    "model": "api.category",
+    "pk": 1,
+    "fields": {
+        "name": "News",
+        "description": "News category"
+    }
+},
+{
+    "model": "api.category",
+    "pk": 2,
+    "fields": {
+        "name": "Advice",
+        "description": "Advice category"
+    }
+},
+{
+    "model": "api.category",
+    "pk": 3,
+    "fields": {
+        "name": "Guide",
+        "description": "Guide category"
+    }
+},
+{
+    "model": "api.category",
+    "pk": 4,
+    "fields": {
+        "name": "Tech",
+        "description": "Tech category"
+    }
+},
+{
+    "model": "api.category",
+    "pk": 5,
+    "fields": {
+        "name": "Tool",
+        "description": "Tool category"
+    }
+},
+{
+    "model": "api.post",
+    "pk": 1,
+    "fields": {
+        "title": "test",
+        "content": "test",
+        "summary": null,
+        "site": null,
+        "source_url": null,
+        "category": 1,
+        "author": [
+            "admin"
+        ],
+        "is_shared": true,
+        "is_summarized": false,
+        "is_draft": false,
+        "created_at": "2026-02-23T06:25:47.750Z",
+        "updated_at": "2026-02-23T06:25:47.750Z",
+        "views": 0
+    }
+},
+{
+    "model": "api.post",
+    "pk": 2,
+    "fields": {
+        "title": "test2",
+        "content": "test",
+        "summary": "",
+        "site": null,
+        "source_url": "https://www.boannews.com/media/view.asp?idx=142326&amp;page=1&amp;kind=4",
+        "category": 1,
+        "author": [
+            "admin"
+        ],
+        "is_shared": true,
+        "is_summarized": false,
+        "is_draft": false,
+        "created_at": "2026-02-23T06:54:50.365Z",
+        "updated_at": "2026-02-23T06:54:50.365Z",
+        "views": 0
+    }
+},
+{
+    "model": "api.post",
+    "pk": 3,
+    "fields": {
+        "title": "test",
+        "content": "<p>오픈클로우&nbsp;대규모&nbsp;RCE&nbsp;취약점&nbsp;악용&nbsp;및&nbsp;API&nbsp;키&nbsp;탈취&nbsp;확산</p><p>마켓플레이스&nbsp;기반&nbsp;공급망&nbsp;공격과&nbsp;AI&nbsp;프레임워크&nbsp;보안&nbsp;공백&nbsp;노출</p><p></p><p>[보안뉴스&nbsp;김형근&nbsp;기자]&nbsp;과거&nbsp;몰트봇(MoltBot)으로&nbsp;알려진&nbsp;오픈소스AI&nbsp;프레임워크&nbsp;‘오픈클로우’(OpenClaw)가&nbsp;여러&nbsp;해킹&nbsp;그룹의&nbsp;공격&nbsp;목표가&nbsp;됐다.&nbsp;컴퓨터를&nbsp;사실상&nbsp;원격으로&nbsp;통제할&nbsp;수&nbsp;있을&nbsp;만큼&nbsp;강력한&nbsp;기능을&nbsp;제공해&nbsp;해커들이&nbsp;계정&nbsp;정보&nbsp;탈취와&nbsp;중요&nbsp;자료&nbsp;유출에&nbsp;악용하기&nbsp;적합한&nbsp;도구로&nbsp;전락했다.</p><p></p><p>▲‘Hightower6eu’는&nbsp;대규모&nbsp;자동&nbsp;배포에&nbsp;사용됐다&nbsp;[출처:&nbsp;Flare]</p><p></p><p>특히&nbsp;이&nbsp;프로그램은&nbsp;배포된&nbsp;지&nbsp;72시간&nbsp;만에&nbsp;원격&nbsp;코드&nbsp;실행(RCE)&nbsp;취약점(CVE-2026-25253)&nbsp;등&nbsp;심각한&nbsp;결함들이&nbsp;발견되면서&nbsp;해커들의&nbsp;악용이&nbsp;시작됐다.</p><p></p><p>분석가들은&nbsp;이미&nbsp;3만개&nbsp;이상의&nbsp;오픈클로우&nbsp;인스턴스가&nbsp;감염돼&nbsp;API&nbsp;키가&nbsp;유포되고&nbsp;있음을&nbsp;확인했다.&nbsp;특히&nbsp;‘클로해벅’(ClawHavoc)&nbsp;캠페인은&nbsp;자동&nbsp;배포&nbsp;기능을&nbsp;활용해&nbsp;‘아토믹&nbsp;스틸러’(Atomic&nbsp;Stealer)&nbsp;등&nbsp;중대한&nbsp;악성&nbsp;페이로드를&nbsp;정상&nbsp;도구인&nbsp;것처럼&nbsp;위장해&nbsp;배포했다.&nbsp;사용자가&nbsp;설치&nbsp;스크립트를&nbsp;실행하면&nbsp;정보&nbsp;탈취형&nbsp;악성코드가&nbsp;자동으로&nbsp;다운로드되며&nbsp;시스템이&nbsp;공격자&nbsp;통제하에&nbsp;놓이는&nbsp;구조다.</p><p></p><p>2월&nbsp;초에는&nbsp;‘클로허브’(ClawHub)&nbsp;마켓플레이스를&nbsp;악용해&nbsp;백도어가&nbsp;삽입된&nbsp;가짜&nbsp;스킬을&nbsp;유포하는&nbsp;공격망&nbsp;공격&nbsp;사례도&nbsp;포착됐다.&nbsp;이를&nbsp;통해&nbsp;공격자들은&nbsp;실시간으로&nbsp;OAuth&nbsp;토큰과&nbsp;비밀번호를&nbsp;탈취하고&nbsp;원격&nbsp;쉘&nbsp;명령을&nbsp;실행한&nbsp;것으로&nbsp;나타났다.</p><p></p><p>▲Shodan이&nbsp;2025년&nbsp;2월&nbsp;18일에&nbsp;기본&nbsp;포트&nbsp;18789를&nbsp;검색하는&nbsp;모습&nbsp;[출처:&nbsp;Flare]</p><p></p><p>최근&nbsp;조사&nbsp;결과&nbsp;31만개&nbsp;이상의&nbsp;오픈클로우&nbsp;인스턴스가&nbsp;기본&nbsp;포트를&nbsp;사용해&nbsp;인증&nbsp;없이&nbsp;인터넷에&nbsp;노출된&nbsp;것으로&nbsp;확인됐다.</p><p></p><p>전문가들은&nbsp;이번&nbsp;사건이&nbsp;보안보다&nbsp;기능&nbsp;확장에&nbsp;집중해&nbsp;온&nbsp;자율형&nbsp;AI&nbsp;에이전트&nbsp;생태계의&nbsp;보안&nbsp;패러다임이&nbsp;바뀌어야&nbsp;함을&nbsp;시사하는&nbsp;중요한&nbsp;전환점이라고&nbsp;평가했다.</p><p></p><p>자율형&nbsp;AI&nbsp;프레임워크&nbsp;오픈클로우의&nbsp;대규모&nbsp;취약점&nbsp;노출&nbsp;사태는&nbsp;AI&nbsp;기술이&nbsp;보안&nbsp;설계&nbsp;없이&nbsp;확장될&nbsp;경우,&nbsp;심각한&nbsp;위험을&nbsp;초래할&nbsp;수&nbsp;있음을&nbsp;보여준다.&nbsp;향후&nbsp;AI&nbsp;생태계가&nbsp;신뢰를&nbsp;회복하기&nbsp;위해서는&nbsp;AI&nbsp;프레임워크&nbsp;개발&nbsp;단계에서&nbsp;‘설계에&nbsp;의한&nbsp;보안’을&nbsp;최우선으로&nbsp;고려하고,&nbsp;기업&nbsp;역시&nbsp;AI&nbsp;업무&nbsp;환경을&nbsp;적절히&nbsp;격리하는&nbsp;대응이&nbsp;요구된다.</p><p></p><p>[김형근&nbsp;기자(editor@boannews.com)]</p><p></p><p>&lt;저작권자:&nbsp;보안뉴스(www.boannews.com)&nbsp;무단전재-재배포금지&gt;</p>",
+        "summary": "{\"title\": \"오픈클로우의 대규모 RCE 취약점 및 API 키 탈취 사건\", \"brief\": \"오픈클로우 AI 프레임워크에서 심각한 취약점이 발견되어 대규모 공격이 발생하고 있다.\", \"summary\": \"오픈클로우라는 오픈소스 AI 프레임워크가 여러 해킹 그룹의 공격 목표가 되었다. 이 프레임워크는 원격 코드 실행(RCE) 취약점이 발견되면서 해커들이 계정 정보와 중요한 자료를 탈취하는 데 악용되고 있다. 최근 분석에 따르면 3만 개 이상의 오픈클로우 인스턴스가 감염되어 API 키가 유포되고 있으며, '클로해벅' 캠페인을 통해 악성 페이로드가 정상 도구인 것처럼 위장되어 배포되고 있다. 또한, 31만 개 이상의 인스턴스가 인증 없이 인터넷에 노출되어 있어 보안 문제가 심각하다. 전문가들은 AI 생태계의 보안 패러다임 전환이 필요하다고 강조하고 있다.\", \"hashtag\": [\"#CVE-2026-25253\", \"#RCE\", \"#OpenClaw\", \"#APIKeyTheft\", \"#CyberSecurity\"], \"sections\": [{\"caption\": \"취약점 개요\", \"content\": [\"오픈클로우에서 원격 코드 실행 취약점이 발견됨.\", \"해커들이 이 취약점을 악용하여 계정 정보 탈취 및 자료 유출을 시도.\"]}, {\"caption\": \"영향받는 시스템\", \"content\": [\"3만 개 이상의 오픈클로우 인스턴스가 감염됨.\", \"31만 개 이상의 인스턴스가 인증 없이 인터넷에 노출됨.\"]}, {\"caption\": \"공격 방법\", \"content\": [\"'클로해벅' 캠페인을 통해 악성 페이로드가 정상 도구인 것처럼 배포됨.\", \"사용자가 설치 스크립트를 실행하면 정보 탈취형 악성코드가 자동으로 다운로드됨.\"]}, {\"caption\": \"권고 조치\", \"content\": [\"AI 프레임워크 개발 시 '설계에 의한 보안'을 최우선으로 고려해야 함.\", \"기업은 AI 업무 환경을 적절히 격리하는 대응이 필요함.\"]}]}",
+        "site": "test",
+        "source_url": "",
+        "category": 1,
+        "author": [
+            "admin"
+        ],
+        "is_shared": true,
+        "is_summarized": true,
+        "is_draft": false,
+        "created_at": "2026-02-24T02:14:13.307Z",
+        "updated_at": "2026-02-24T02:14:13.307Z",
+        "views": 0
+    }
+},
+{
+    "model": "api.aiconfig",
+    "pk": 1,
+    "fields": {
+        "model": "gpt-4o-mini",
+        "system_prompt": "당신은 사이버 보안 전문 분석가입니다. 사용자가 제공하는 보안 관련 뉴스/아티클을 분석하여, 반드시 아래 JSON 스키마에 맞는 유효한 JSON만 출력하세요. 마크다운 코드블록(```), 추가 설명, 서문 없이 JSON 객체 그 자체만 반환해야 합니다.\n\nIMPORTANT: 스키마의 값들은 모두 형식 예시입니다. 실제 출력 시에는 아티클 내용을 분석하여 의미 있는 텍스트로 반드시 대체해야 합니다. 하위소제목, 소제목, 요점, 세부내용 등의 예시 단어를 그대로 사용하지 마세요.\n\n요구사항:\n1. sections는 위협 개요 / 영향받는 시스템 / 공격 방법 / 권고 조치 등 실제 내용에 맞게 caption을 생성하세요.\n2. 중첩 섹션(content 내 객체)은 상위 섹션을 세분화할 필요가 있을 때만 사용하세요.\n3. 내용이 부족한 섹션은 생략하세요.\n4. hashtag는 CVE 번호, 위협 유형, 제품명 등 5개 이상 영어로 나열하세요.\n5. 답변은 한국어로 합니다(hashtag 제외).\n6. brief는 1-2줄, summary는 최소 200자 최대 500자.\n\n출력 JSON 스키마 (값은 예시이며 실제 내용으로 대체할 것):\n{\"title\":\"실제제목\",\"brief\":\"실제한두줄요약\",\"summary\":\"실제전체요약문단\",\"hashtag\":[\"#실제키워드1\",\"#실제키워드2\"],\"sections\":[{\"caption\":\"실제섹션소제목\",\"content\":[\"실제요점1\",\"실제요점2\"]}]}\n6. 모든 문장의 어미는 반드시 '~니다' 형식의 한국어 격식체(합쇼체)로 통일합니다. 예: ~됩니다, ~있습니다, ~합니다, ~나타납니다. ~함., ~됨. 등의 비격식체는 절대 사용하지 마세요.",
+        "max_tokens": 2000,
+        "temperature": 0.3,
+        "updated_at": "2026-02-24T02:39:57.417Z"
+    }
+}
+]
