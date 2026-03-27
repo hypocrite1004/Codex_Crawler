@@ -1,6 +1,19 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Post, Category, Comment, AIConfig, CrawlerSource, CrawlerLog
+from django.utils.html import strip_tags
+from .crawler_security import CrawlerSecurityError, validate_crawler_request_config
+from .models import (
+    Post,
+    Category,
+    Comment,
+    AIConfig,
+    CrawlerSource,
+    CrawlerLog,
+    CrawlRun,
+    CrawlItem,
+    CveRecord,
+    PostCveMention,
+)
 
 class PublicUserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -11,8 +24,8 @@ class PublicUserSerializer(serializers.ModelSerializer):
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'is_staff']
-        read_only_fields = ['id', 'is_staff']
+        fields = ['id', 'username', 'email', 'is_staff', 'is_superuser']
+        read_only_fields = ['id', 'is_staff', 'is_superuser']
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, min_length=4)
@@ -43,16 +56,111 @@ class CommentSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['post', 'author']
 
+
+class PostCveMentionSerializer(serializers.ModelSerializer):
+    cve_id = serializers.CharField(source='cve.cve_id', read_only=True)
+    severity = serializers.CharField(source='cve.severity', read_only=True)
+    cvss_score = serializers.FloatField(source='cve.cvss_score', read_only=True)
+    mention_count = serializers.IntegerField(source='cve.mention_count', read_only=True)
+    vendor = serializers.CharField(source='cve.vendor', read_only=True)
+    product = serializers.CharField(source='cve.product', read_only=True)
+
+    class Meta:
+        model = PostCveMention
+        fields = [
+            'id',
+            'cve',
+            'cve_id',
+            'severity',
+            'cvss_score',
+            'mention_count',
+            'vendor',
+            'product',
+            'source',
+            'mentioned_in',
+            'legacy_reference_ids',
+            'created_at',
+        ]
+        read_only_fields = fields
+
+
+class CveRecordSerializer(serializers.ModelSerializer):
+    post_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = CveRecord
+        fields = [
+            'id',
+            'cve_id',
+            'description',
+            'severity',
+            'cvss_score',
+            'published_date',
+            'vendor',
+            'product',
+            'mention_count',
+            'first_seen',
+            'last_seen',
+            'post_count',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = fields
+
+
+class AdminCveRecordSerializer(serializers.ModelSerializer):
+    post_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = CveRecord
+        fields = [
+            'id',
+            'cve_id',
+            'description',
+            'severity',
+            'cvss_score',
+            'published_date',
+            'vendor',
+            'product',
+            'is_tracked',
+            'notes',
+            'mention_count',
+            'legacy_mention_count',
+            'first_seen',
+            'last_seen',
+            'post_count',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = fields
+
+
 class PostSerializer(serializers.ModelSerializer):
     author = PublicUserSerializer(read_only=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
     comments = CommentSerializer(many=True, read_only=True)
+    cve_mentions = PostCveMentionSerializer(many=True, read_only=True)
     related_count = serializers.IntegerField(read_only=True, default=0)
     related_posts_list = serializers.SerializerMethodField()
+    approved_by_name = serializers.CharField(source='approved_by.username', read_only=True)
+    rejected_by_name = serializers.CharField(source='rejected_by.username', read_only=True)
     
     class Meta:
         model = Post
         fields = '__all__'
+        read_only_fields = [
+            'author',
+            'status',
+            'approval_requested_at',
+            'approved_by',
+            'approved_at',
+            'rejected_by',
+            'rejected_at',
+            'rejection_reason',
+            'archived_at',
+            'approved_by_name',
+            'rejected_by_name',
+        ]
 
     def get_related_posts_list(self, obj):
         children = obj.related_posts.all().order_by('-created_at')
@@ -65,6 +173,71 @@ class PostSerializer(serializers.ModelSerializer):
                 'created_at': child.created_at.isoformat() if child.created_at else None,
             } for child in children
         ]
+
+
+class PostListSerializer(serializers.ModelSerializer):
+    author = PublicUserSerializer(read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    related_count = serializers.IntegerField(read_only=True, default=0)
+    cve_count = serializers.IntegerField(read_only=True, default=0)
+    content_preview = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Post
+        fields = [
+            'id',
+            'title',
+            'site',
+            'source_url',
+            'category',
+            'category_name',
+            'author',
+            'is_shared',
+            'is_summarized',
+            'status',
+            'created_at',
+            'related_count',
+            'cve_count',
+            'content_preview',
+        ]
+        read_only_fields = fields
+
+    def get_content_preview(self, obj):
+        preview = strip_tags(obj.content or '').strip()
+        preview = ' '.join(preview.split())
+        if len(preview) > 160:
+            return f'{preview[:160].rstrip()}...'
+        return preview
+
+
+class AdminPostListSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    approved_by_name = serializers.CharField(source='approved_by.username', read_only=True)
+    rejected_by_name = serializers.CharField(source='rejected_by.username', read_only=True)
+    related_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = Post
+        fields = [
+            'id',
+            'title',
+            'site',
+            'source_url',
+            'category',
+            'category_name',
+            'status',
+            'is_summarized',
+            'created_at',
+            'related_count',
+            'approval_requested_at',
+            'approved_by_name',
+            'approved_at',
+            'rejected_by_name',
+            'rejected_at',
+            'rejection_reason',
+            'archived_at',
+        ]
+        read_only_fields = fields
 
 
 class AIConfigSerializer(serializers.ModelSerializer):
@@ -99,6 +272,58 @@ class CrawlerLogSerializer(serializers.ModelSerializer):
             'crawled_at',
         ]
         read_only_fields = fields
+
+
+class CrawlItemSerializer(serializers.ModelSerializer):
+    post_id = serializers.IntegerField(source='post.id', read_only=True)
+
+    class Meta:
+        model = CrawlItem
+        fields = [
+            'id',
+            'item_status',
+            'source_url',
+            'normalized_url',
+            'title',
+            'error_message',
+            'payload',
+            'post_id',
+            'created_at',
+        ]
+        read_only_fields = fields
+
+
+class CrawlRunSerializer(serializers.ModelSerializer):
+    source_name = serializers.CharField(source='source.name', read_only=True)
+    item_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CrawlRun
+        fields = [
+            'id',
+            'source',
+            'source_name',
+            'triggered_by',
+            'status',
+            'started_at',
+            'finished_at',
+            'attempt_count',
+            'articles_found',
+            'articles_created',
+            'duplicate_count',
+            'filtered_count',
+            'error_count',
+            'duration_seconds',
+            'error_message',
+            'item_count',
+        ]
+        read_only_fields = fields
+
+    def get_item_count(self, obj):
+        annotated_count = getattr(obj, 'item_count', None)
+        if annotated_count is not None:
+            return annotated_count
+        return obj.items.count()
 
 
 class CrawlerSourceSerializer(serializers.ModelSerializer):
@@ -142,3 +367,18 @@ class CrawlerSourceSerializer(serializers.ModelSerializer):
 
     def get_health_status(self, obj):
         return obj.health_status()
+
+    def validate(self, attrs):
+        candidate = {}
+        for key in ['url', 'request_headers']:
+            if key in attrs:
+                candidate[key] = attrs[key]
+            elif self.instance is not None:
+                candidate[key] = getattr(self.instance, key)
+
+        try:
+            validate_crawler_request_config(candidate)
+        except CrawlerSecurityError as exc:
+            raise serializers.ValidationError(exc.detail) from exc
+
+        return attrs

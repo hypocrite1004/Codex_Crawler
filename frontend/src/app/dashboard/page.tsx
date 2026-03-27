@@ -1,6 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
     Area,
     AreaChart,
@@ -17,7 +19,8 @@ import {
     YAxis,
     ZAxis,
 } from 'recharts';
-import { fetchDashboard, getErrorMessage, type DashboardData } from '@/lib/api';
+
+import { fetchDashboard, fetchProfile, getErrorMessage, type DashboardData } from '@/lib/api';
 
 const COLORS = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4'];
 
@@ -35,9 +38,24 @@ function formatDateTime(value: string) {
     });
 }
 
+function getSeverityColor(severity: string) {
+    switch ((severity || '').toUpperCase()) {
+        case 'CRITICAL':
+            return '#ef4444';
+        case 'HIGH':
+            return '#f97316';
+        case 'MEDIUM':
+            return '#f59e0b';
+        case 'LOW':
+            return '#22c55e';
+        default:
+            return '#64748b';
+    }
+}
+
 function renderChangeBadge(percent: number) {
     if (percent === 0) {
-        return <span style={{ color: '#94a3b8', fontWeight: 600 }}>변동 없음</span>;
+        return <span style={{ color: '#94a3b8', fontWeight: 600 }}>변화 없음</span>;
     }
 
     const isUp = percent > 0;
@@ -77,12 +95,37 @@ function SummaryCard({
 }
 
 export default function DashboardPage() {
+    const router = useRouter();
     const [period, setPeriod] = useState<'week' | 'month'>('week');
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
+    const [isAdmin, setIsAdmin] = useState(false);
+
+    useEffect(() => {
+        const verifyAccess = async () => {
+            try {
+                const user = await fetchProfile();
+                if (!user.is_staff) {
+                    router.replace('/');
+                    return;
+                }
+                setIsAdmin(Boolean(user.is_superuser));
+                setIsAuthorized(true);
+            } catch {
+                router.replace('/login');
+            }
+        };
+
+        void verifyAccess();
+    }, [router]);
 
     const load = useCallback(async () => {
+        if (!isAuthorized) {
+            return;
+        }
+
         setLoading(true);
         setError('');
 
@@ -94,18 +137,25 @@ export default function DashboardPage() {
         } finally {
             setLoading(false);
         }
-    }, [period]);
+    }, [isAuthorized, period]);
 
     useEffect(() => {
+        if (!isAuthorized) {
+            return;
+        }
         void load();
-    }, [load]);
+    }, [isAuthorized, load]);
 
-    if (loading) {
+    if (isAuthorized === null || loading) {
         return (
             <div style={{ display: 'flex', minHeight: '60vh', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ color: 'var(--text-secondary)' }}>대시보드 로딩 중...</div>
             </div>
         );
+    }
+
+    if (!isAuthorized || !data) {
+        return null;
     }
 
     if (error) {
@@ -117,15 +167,12 @@ export default function DashboardPage() {
         );
     }
 
-    if (!data) {
-        return null;
-    }
-
     const summary = data.summary;
     const periodLabel = period === 'week' ? '이번 주' : '이번 달';
-    const postChange = summary.prev_period_posts > 0
-        ? Math.round(((summary.period_posts - summary.prev_period_posts) / summary.prev_period_posts) * 100)
-        : 0;
+    const postChange =
+        summary.prev_period_posts > 0
+            ? Math.round(((summary.period_posts - summary.prev_period_posts) / summary.prev_period_posts) * 100)
+            : 0;
     const categoryKeys = [
         ...new Set(
             data.daily_trend.flatMap((item) =>
@@ -140,7 +187,7 @@ export default function DashboardPage() {
                 <div>
                     <h1 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.5rem' }}>보안 인텔리전스 대시보드</h1>
                     <p style={{ margin: '0.35rem 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                        수집 현황, 카테고리 변화, 급상승 키워드를 한 화면에서 확인합니다.
+                        콘텐츠 운영 지표와 최근 수집 흐름을 한 화면에서 확인합니다.
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -176,37 +223,47 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '1rem' }}>
+            <div
+                style={{
+                    display: 'grid',
+                    gridTemplateColumns: isAdmin ? 'repeat(4, minmax(0, 1fr))' : 'repeat(3, minmax(0, 1fr))',
+                    gap: '1rem',
+                }}
+            >
                 <SummaryCard
-                    title="전체 기사"
+                    title="전체 게시글"
                     value={summary.total_posts.toLocaleString()}
-                    detail={<>{periodLabel} {summary.period_posts.toLocaleString()}건, {renderChangeBadge(postChange)}</>}
+                    detail={<>{periodLabel} {summary.period_posts.toLocaleString()}건 · {renderChangeBadge(postChange)}</>}
                 />
                 <SummaryCard
-                    title={`${periodLabel} 대표 키워드`}
+                    title={`${periodLabel} 키워드`}
                     value={data.trending_keywords[0]?.word ?? '-'}
-                    detail={data.trending_keywords[0]
-                        ? <>{data.trending_keywords[0].count}건, {renderChangeBadge(data.trending_keywords[0].change_pct)}</>
-                        : '집계된 데이터가 없습니다.'}
+                    detail={
+                        data.trending_keywords[0]
+                            ? <>{data.trending_keywords[0].count}건 · {renderChangeBadge(data.trending_keywords[0].change_pct)}</>
+                            : '집계된 키워드가 없습니다.'
+                    }
                 />
+                {isAdmin && summary.active_sources !== undefined && summary.total_sources !== undefined && (
+                    <SummaryCard
+                        title="활성 소스"
+                        value={`${summary.active_sources} / ${summary.total_sources}`}
+                        detail="활성 소스 / 전체 소스"
+                    />
+                )}
                 <SummaryCard
-                    title="활성 소스"
-                    value={`${summary.active_sources} / ${summary.total_sources}`}
-                    detail="활성 소스 / 전체 소스"
-                />
-                <SummaryCard
-                    title="마지막 수집"
+                    title="마지막 크롤링"
                     value={summary.last_crawled_at ? formatShortDate(summary.last_crawled_at) : '-'}
-                    detail={summary.last_crawled_at ? formatDateTime(summary.last_crawled_at) : '수집 기록이 없습니다.'}
+                    detail={summary.last_crawled_at ? formatDateTime(summary.last_crawled_at) : '크롤링 기록이 없습니다.'}
                 />
             </div>
 
-            {data.bubble_data.length > 0 && (
+            {isAdmin && data.bubble_data.length > 0 && (
                 <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '1.2rem' }}>
                     <div style={{ marginBottom: '1rem' }}>
-                        <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>AI 연관 이슈 버블 맵</div>
+                        <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>AI 유사도 버블 맵</div>
                         <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '0.2rem' }}>
-                            원이 클수록 연관 기사 수가 많습니다.
+                            임베딩 기반 군집 결과를 운영 관점에서 확인하는 관리자 전용 섹션입니다.
                         </div>
                     </div>
                     <ResponsiveContainer width="100%" height={260}>
@@ -232,7 +289,7 @@ export default function DashboardPage() {
                                         <div style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '0.7rem 0.9rem' }}>
                                             <div style={{ color: '#e2e8f0', fontWeight: 600 }}>{point.title}</div>
                                             <div style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '0.2rem' }}>
-                                                [{point.category}] 연관 기사 {point.related_count}건
+                                                [{point.category}] 관련 게시글 {point.related_count}건
                                             </div>
                                         </div>
                                     );
@@ -254,7 +311,7 @@ export default function DashboardPage() {
                         <div style={{ marginBottom: '1rem' }}>
                             <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>일별 수집 추이</div>
                             <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '0.2rem' }}>
-                                날짜별 기사량과 카테고리 분포를 보여줍니다.
+                                날짜별 게시글 수와 카테고리 분포를 확인합니다.
                             </div>
                         </div>
                         <ResponsiveContainer width="100%" height={240}>
@@ -315,7 +372,7 @@ export default function DashboardPage() {
                         <div style={{ marginBottom: '1rem' }}>
                             <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>카테고리별 수집 비교</div>
                             <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '0.2rem' }}>
-                                현재 기간과 직전 기간의 기사 수를 비교합니다.
+                                현재 기간과 직전 기간의 카테고리별 수집량을 비교합니다.
                             </div>
                         </div>
                         <ResponsiveContainer width="100%" height={220}>
@@ -341,7 +398,7 @@ export default function DashboardPage() {
                     <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '1.2rem' }}>
                         <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '0.3rem' }}>급상승 키워드</div>
                         <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.9rem' }}>
-                            이전 기간 대비 증가폭이 큰 순서입니다.
+                            이전 기간 대비 증가 폭이 큰 키워드를 표시합니다.
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                             {data.trending_keywords.slice(0, 12).map((keyword, index) => {
@@ -380,18 +437,69 @@ export default function DashboardPage() {
                             })}
                         </div>
                     </div>
+
+                    <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '1.2rem' }}>
+                        <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '0.3rem' }}>Top CVEs</div>
+                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.9rem' }}>
+                            게시글에서 자주 언급된 CVE 목록입니다.
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                            {data.top_cves.length === 0 ? (
+                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>표시할 CVE 데이터가 없습니다.</div>
+                            ) : (
+                                data.top_cves.map((cve) => (
+                                    <div
+                                        key={cve.cve_id}
+                                        style={{
+                                            padding: '0.75rem',
+                                            borderRadius: '10px',
+                                            border: '1px solid rgba(255,255,255,0.06)',
+                                            background: 'rgba(255,255,255,0.03)',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '0.35rem',
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', alignItems: 'center' }}>
+                                            <div style={{ color: 'var(--text-primary)', fontSize: '0.84rem', fontWeight: 600 }}>{cve.cve_id}</div>
+                                            <span
+                                                style={{
+                                                    fontSize: '0.68rem',
+                                                    padding: '2px 6px',
+                                                    borderRadius: '999px',
+                                                    background: `${getSeverityColor(cve.severity)}22`,
+                                                    color: getSeverityColor(cve.severity),
+                                                    border: `1px solid ${getSeverityColor(cve.severity)}44`,
+                                                }}
+                                            >
+                                                {cve.severity || 'UNKNOWN'}
+                                            </span>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                                            <span>언급 {cve.mention_count}회</span>
+                                            <span>게시글 {cve.post_count}건</span>
+                                            {typeof cve.cvss_score === 'number' && <span>CVSS {cve.cvss_score.toFixed(1)}</span>}
+                                        </div>
+                                        {cve.last_seen && (
+                                            <div style={{ color: '#64748b', fontSize: '0.72rem' }}>
+                                                마지막 확인 {formatDateTime(cve.last_seen)}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '1.2rem' }}>
-                <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '1rem' }}>최근 수집 기사</div>
+                <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '1rem' }}>최근 수집 게시글</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '0.75rem' }}>
                     {data.recent_posts.map((post) => (
-                        <a
+                        <Link
                             key={post.id}
-                            href={post.source_url || '#'}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            href={`/posts/${post.id}`}
                             style={{
                                 display: 'flex',
                                 flexDirection: 'column',
@@ -429,11 +537,11 @@ export default function DashboardPage() {
                                 <span>{formatDateTime(post.created_at)}</span>
                                 {post.related_count > 0 && (
                                     <span style={{ color: '#8b5cf6', background: 'rgba(139,92,246,0.15)', padding: '2px 6px', borderRadius: '10px' }}>
-                                        + {post.related_count}건 연관
+                                        + {post.related_count}건 관련
                                     </span>
                                 )}
                             </div>
-                        </a>
+                        </Link>
                     ))}
                 </div>
             </div>

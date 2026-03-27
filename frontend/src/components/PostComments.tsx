@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { addComment, Comment, updateComment, deleteComment, fetchProfile, type AuthUser, getErrorMessage } from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import toast from 'react-hot-toast';
 import dynamic from 'next/dynamic';
 import type { ReactQuillProps } from 'react-quill-new';
@@ -98,22 +99,28 @@ export default function PostComments({ postId, initialComments }: { postId: numb
         <div style={{ marginTop: '4rem', paddingTop: '2rem', borderTop: '1px solid var(--glass-border)' }}>
             <h3 style={{ fontSize: '1.5rem', marginBottom: '1.5rem', color: 'var(--text-primary)' }}>Discussion ({comments.length})</h3>
 
-            <form onSubmit={handleSubmit} style={{ marginBottom: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div className="quill-dark-theme-wrapper" style={{ borderRadius: '4px' }}>
-                    <ReactQuill
-                        theme="snow"
-                        value={newComment}
-                        onChange={setNewComment}
-                        style={{ minHeight: '350px' }}
-                        placeholder="Share your thoughts on this intel..."
-                    />
+            {currentUser ? (
+                <form onSubmit={handleSubmit} style={{ marginBottom: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="quill-dark-theme-wrapper" style={{ borderRadius: '4px' }}>
+                        <ReactQuill
+                            theme="snow"
+                            value={newComment}
+                            onChange={setNewComment}
+                            style={{ minHeight: '350px' }}
+                            placeholder="Share your thoughts on this intel..."
+                        />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <button type="submit" disabled={loading} className="btn btn-primary">
+                            {loading ? 'Posting...' : 'Post Comment'}
+                        </button>
+                    </div>
+                </form>
+            ) : (
+                <div style={{ marginBottom: '2rem', padding: '1rem 1.2rem', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>
+                    댓글 작성은 로그인 후 가능합니다. <Link href="/login" style={{ color: 'var(--accent-primary)' }}>로그인</Link>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button type="submit" disabled={loading} className="btn btn-primary">
-                        {loading ? 'Posting...' : 'Post Comment'}
-                    </button>
-                </div>
-            </form>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 {comments.map((comment) => (

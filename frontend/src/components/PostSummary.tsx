@@ -28,20 +28,6 @@ interface SummaryJSON {
     sections?: SectionNode[];
 }
 
-function renderMarkdown(text: string): string {
-    return (
-        text
-            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-            .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
-            .replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px;font-family:monospace;font-size:0.9em;color:var(--accent-secondary)">$1</code>')
-            .replace(/^- (.+)$/gm, '<li style="margin-bottom:6px;line-height:1.7">$1</li>')
-            .replace(/(<li.*<\/li>\n?)+/g, (match) => `<ul style="padding-left:1.4rem;margin:8px 0">${match}</ul>`)
-            .replace(/\n{2,}/g, '</p><p style="margin-bottom:1em">')
-            .replace(/\n/g, '<br>')
-            .replace(/^(.+)/, '<p style="margin-bottom:1em">$1') + '</p>'
-    );
-}
-
 function contentToMarkdown(items: SectionContent[], depth = 0): string {
     const indent = '  '.repeat(depth);
     return items.map((item) => {
@@ -424,9 +410,17 @@ export default function PostSummary({
                 ) : (
                     <div
                         className="post-content"
-                        style={{ padding: '1rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(summary) }}
-                    />
+                        style={{
+                            padding: '1rem',
+                            background: 'rgba(0,0,0,0.2)',
+                            borderRadius: '8px',
+                            whiteSpace: 'pre-wrap',
+                            lineHeight: 1.7,
+                            color: 'var(--text-primary)',
+                        }}
+                    >
+                        {summary}
+                    </div>
                 )
             )}
         </div>

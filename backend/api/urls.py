@@ -1,14 +1,16 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import PostViewSet, CategoryViewSet, UserViewSet, RegisterView, UserProfileView, CommentViewSet, AIConfigView, TestClusteringView, AIModelsView, CrawlerSourceViewSet, DashboardView
+from .views import PostViewSet, CategoryViewSet, UserViewSet, RegisterView, UserProfileView, CommentViewSet, AIConfigView, TestClusteringView, AIModelsView, CrawlerSourceViewSet, CrawlerRunViewSet, DashboardView, CveRecordViewSet
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 router = DefaultRouter()
 router.register(r'posts', PostViewSet)
 router.register(r'categories', CategoryViewSet)
 router.register(r'users', UserViewSet)
-router.register(r'comments', CommentViewSet)
+router.register(r'comments', CommentViewSet, basename='comment')
+router.register(r'cves', CveRecordViewSet)
 router.register(r'crawler-sources', CrawlerSourceViewSet)
+router.register(r'crawler-runs', CrawlerRunViewSet)
 
 urlpatterns = [
     path('users/me/', UserProfileView.as_view(), name='user_profile'),

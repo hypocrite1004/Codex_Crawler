@@ -33,7 +33,7 @@ export default function AISettingsPage() {
     const [form, setForm] = useState<AISettingsForm>(DEFAULT_FORM);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [isStaff, setIsStaff] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
     const [modelList, setModelList] = useState<AIModelItem[]>([]);
     const [modelSource, setModelSource] = useState<'openai' | 'fallback'>('fallback');
     const [modelLoading, setModelLoading] = useState(true);
@@ -45,13 +45,13 @@ export default function AISettingsPage() {
         const init = async () => {
             try {
                 const user = await fetchProfile();
-                if (!user.is_staff) {
+                if (!user.is_superuser) {
                     toast.error('관리자만 접근할 수 있습니다.');
                     router.push('/');
                     return;
                 }
 
-                setIsStaff(true);
+                setIsAdmin(true);
 
                 const [nextConfig, modelsData] = await Promise.all([
                     fetchAIConfig(),
@@ -123,7 +123,7 @@ export default function AISettingsPage() {
         );
     }
 
-    if (!isStaff) {
+    if (!isAdmin) {
         return null;
     }
 

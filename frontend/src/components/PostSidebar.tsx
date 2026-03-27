@@ -1,14 +1,21 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { type Post, toggleSharePost, getErrorMessage } from '@/lib/api';
+import { fetchProfile, type AuthUser, type Post, toggleSharePost, getErrorMessage } from '@/lib/api';
 import toast from 'react-hot-toast';
 
 export default function PostSidebar({ post }: { post: Post }) {
     const router = useRouter();
     const [isShared, setIsShared] = useState(post.is_shared);
     const [shareLoading, setShareLoading] = useState(false);
+    const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+
+    useEffect(() => {
+        fetchProfile().then(setCurrentUser).catch(() => undefined);
+    }, []);
+
+    const canToggleShare = Boolean(currentUser?.is_staff);
 
     const handleCopyContent = async () => {
         try {
@@ -55,14 +62,16 @@ export default function PostSidebar({ post }: { post: Post }) {
             <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.5rem' }}>Actions</h3>
 
-                <button
-                    onClick={handleShare}
-                    disabled={shareLoading}
-                    className={`btn ${isShared ? 'btn-primary' : 'btn-outline'}`}
-                    style={{ width: '100%' }}
-                >
-                    {shareLoading ? 'Processing...' : isShared ? 'Shared' : 'Share Article'}
-                </button>
+                {canToggleShare && (
+                    <button
+                        onClick={handleShare}
+                        disabled={shareLoading}
+                        className={`btn ${isShared ? 'btn-primary' : 'btn-outline'}`}
+                        style={{ width: '100%' }}
+                    >
+                        {shareLoading ? 'Processing...' : isShared ? 'Curated' : 'Mark as Curated'}
+                    </button>
+                )}
 
                 {(post.source_url || post.site) && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginTop: '0.5rem', paddingTop: '1rem', borderTop: '1px solid var(--glass-border)' }}>

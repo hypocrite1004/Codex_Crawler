@@ -1,21 +1,70 @@
 from rest_framework import viewsets, permissions, generics, status
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth.models import User
+from django.db.models import Count, Q
 from django.utils.html import strip_tags
-from .models import Post, Category, Comment, AIConfig, CrawlerSource, CrawlerLog
-from .serializers import PostSerializer, CategorySerializer, PublicUserSerializer, ProfileSerializer, RegisterSerializer, CommentSerializer, AIConfigSerializer, CrawlerSourceSerializer, CrawlerLogSerializer
+from django.utils import timezone
+from .models import (
+    Post,
+    Category,
+    Comment,
+    AIConfig,
+    CrawlerSource,
+    CrawlerLog,
+    CrawlRun,
+    CveRecord,
+    PostCveMention,
+)
+from .serializers import (
+    PostSerializer,
+    PostListSerializer,
+    AdminPostListSerializer,
+    CategorySerializer,
+    PublicUserSerializer,
+    ProfileSerializer,
+    RegisterSerializer,
+    CommentSerializer,
+    AIConfigSerializer,
+    CrawlerSourceSerializer,
+    CrawlerLogSerializer,
+    CrawlRunSerializer,
+    CrawlItemSerializer,
+    CveRecordSerializer,
+    AdminCveRecordSerializer,
+)
+from .crawler_security import CrawlerSecurityError, validate_crawler_request_config
 import os
 import re
 import json
 import html as html_lib
 from urllib.parse import urlparse
+from .cve_sync import sync_post_cve_mentions
 try:
     from openai import OpenAI
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
+
+
+def is_staff_user(user) -> bool:
+    return bool(getattr(user, 'is_authenticated', False) and getattr(user, 'is_staff', False))
+
+
+def is_admin_user(user) -> bool:
+    return bool(getattr(user, 'is_authenticated', False) and getattr(user, 'is_superuser', False))
+
+
+class IsStaffUser(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return is_staff_user(request.user)
+
+
+class IsSuperUser(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return is_admin_user(request.user)
 
 
 def html_to_plain(html_content: str) -> str:
@@ -81,6 +130,141 @@ def sanitize_rich_text(html_content: str) -> str:
 
     return str(soup).strip()
 
+
+def _normalize_summary_text(value, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f'{field_name} must be a string.')
+
+    normalized = strip_tags(value).strip()
+    if not normalized:
+        raise ValueError(f'{field_name} may not be blank.')
+    return normalized
+
+
+def _normalize_summary_section(section: dict) -> dict:
+    if not isinstance(section, dict):
+        raise ValueError('Each section must be an object.')
+
+    caption = _normalize_summary_text(section.get('caption'), 'caption')
+    content = section.get('content')
+    if not isinstance(content, list) or not content:
+        raise ValueError('Each section must include a non-empty content list.')
+
+    normalized_content = []
+    for item in content:
+        if isinstance(item, str):
+            normalized_content.append(_normalize_summary_text(item, 'content item'))
+        elif isinstance(item, dict):
+            normalized_content.append(_normalize_summary_section(item))
+        else:
+            raise ValueError('Section content items must be strings or nested sections.')
+
+    return {
+        'caption': caption,
+        'content': normalized_content,
+    }
+
+
+def normalize_summary_payload(payload) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError('Summary payload must be a JSON object.')
+
+    allowed_keys = {'title', 'brief', 'summary', 'hashtag', 'sections'}
+    unknown_keys = set(payload) - allowed_keys
+    if unknown_keys:
+        raise ValueError(f'Unsupported summary keys: {", ".join(sorted(unknown_keys))}.')
+
+    normalized: dict = {}
+    for field in ('title', 'brief', 'summary'):
+        if field in payload and payload[field] not in (None, ''):
+            normalized[field] = _normalize_summary_text(payload[field], field)
+
+    hashtags = payload.get('hashtag')
+    if hashtags is not None:
+        if not isinstance(hashtags, list):
+            raise ValueError('hashtag must be a list of strings.')
+        normalized_tags = []
+        for tag in hashtags:
+            normalized_tags.append(_normalize_summary_text(tag, 'hashtag'))
+        if normalized_tags:
+            normalized['hashtag'] = normalized_tags
+
+    sections = payload.get('sections')
+    if sections is not None:
+        if not isinstance(sections, list):
+            raise ValueError('sections must be a list.')
+        normalized_sections = [_normalize_summary_section(section) for section in sections]
+        if normalized_sections:
+            normalized['sections'] = normalized_sections
+
+    if not normalized:
+        raise ValueError('Summary payload must contain at least one supported field.')
+
+    return normalized
+
+
+def generate_summary_payload(post: Post) -> dict:
+    config = AIConfig.get_config()
+    api_key = os.environ.get('OPENAI_API_KEY', '')
+
+    if not OPENAI_AVAILABLE:
+        raise RuntimeError('OpenAI client is not installed.')
+    if not api_key or api_key.startswith('sk-dummy'):
+        raise RuntimeError('AI summary generation is not configured.')
+
+    client = OpenAI(api_key=api_key)
+    plain_content = html_to_plain(post.content)
+    response = client.chat.completions.create(
+        model=config.model,
+        messages=[
+            {'role': 'system', 'content': config.system_prompt},
+            {'role': 'user', 'content': f'Article:\n{plain_content}'},
+        ],
+        max_tokens=config.max_tokens,
+        temperature=config.temperature,
+    )
+    raw = response.choices[0].message.content or ''
+    clean = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip(), flags=re.MULTILINE)
+    parsed = json.loads(clean)
+    return normalize_summary_payload(parsed)
+
+
+def _apply_post_status(post: Post, next_status: str, actor=None, rejection_reason: str = ''):
+    now = timezone.now()
+    post.status = next_status
+    post.is_draft = next_status != 'published'
+
+    if next_status == 'draft':
+        post.approval_requested_at = None
+        post.approved_by = None
+        post.approved_at = None
+        post.rejected_by = None
+        post.rejected_at = None
+        post.rejection_reason = ''
+        post.archived_at = None
+    elif next_status == 'review':
+        post.approval_requested_at = now
+        post.approved_by = None
+        post.approved_at = None
+        post.rejected_by = None
+        post.rejected_at = None
+        post.rejection_reason = ''
+        post.archived_at = None
+    elif next_status == 'rejected':
+        post.rejected_by = actor if getattr(actor, 'is_authenticated', False) else None
+        post.rejected_at = now
+        post.rejection_reason = rejection_reason
+        post.archived_at = None
+    elif next_status == 'published':
+        post.approved_by = actor if getattr(actor, 'is_authenticated', False) else post.approved_by
+        post.approved_at = now
+        post.rejected_by = None
+        post.rejected_at = None
+        post.rejection_reason = ''
+        post.archived_at = None
+    elif next_status == 'archived':
+        post.archived_at = now
+
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = (permissions.AllowAny,)
@@ -104,14 +288,26 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
 class CommentViewSet(viewsets.ModelViewSet):
-    queryset = Comment.objects.all()
     serializer_class = CommentSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        queryset = Comment.objects.select_related('author', 'post', 'post__author')
+        if is_staff_user(self.request.user):
+            return queryset
+        if not self.request.user.is_authenticated:
+            return queryset.none()
+        return queryset.filter(author=self.request.user)
+
+    def list(self, request, *args, **kwargs):
+        if not is_staff_user(request.user):
+            return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return super().list(request, *args, **kwargs)
 
     def perform_update(self, serializer):
         from rest_framework.exceptions import PermissionDenied
         from rest_framework.exceptions import ValidationError
-        if serializer.instance.author.id != self.request.user.id and not self.request.user.is_staff:
+        if serializer.instance.author.id != self.request.user.id and not is_staff_user(self.request.user):
             raise PermissionDenied("You do not have permission to edit this comment.")
         sanitized_content = sanitize_rich_text(serializer.validated_data.get('content', serializer.instance.content))
         if not strip_tags(sanitized_content).strip():
@@ -120,7 +316,7 @@ class CommentViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         from rest_framework.exceptions import PermissionDenied
-        if instance.author.id != self.request.user.id and not self.request.user.is_staff:
+        if instance.author.id != self.request.user.id and not is_staff_user(self.request.user):
             raise PermissionDenied("You do not have permission to delete this comment.")
         instance.delete()
 
@@ -129,69 +325,269 @@ class PostViewSet(viewsets.ModelViewSet):
     serializer_class = PostSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
-    def perform_update(self, serializer):
-        from rest_framework.exceptions import PermissionDenied
-        # 관리자만 포스트 수정 가능
-        if not self.request.user.is_staff:
-            raise PermissionDenied("You do not have permission to edit this post.")
-        serializer.save()
+    def _list_response(self, request, queryset, *, default_page_size: int, max_page_size: int):
+        raw_limit = request.query_params.get('limit')
+        raw_page = request.query_params.get('page')
+        raw_page_size = request.query_params.get('page_size')
 
-    def perform_destroy(self, instance):
-        from rest_framework.exceptions import PermissionDenied
-        # 관리자만 포스트 삭제 가능
-        if not self.request.user.is_staff:
-            raise PermissionDenied("You do not have permission to delete this post.")
-        instance.delete()
+        paginator = PageNumberPagination()
+
+        if raw_limit is not None:
+            try:
+                requested_size = int(raw_limit)
+            except ValueError:
+                requested_size = default_page_size
+            requested_size = min(max(requested_size, 1), max_page_size)
+        elif raw_page_size is not None:
+            try:
+                requested_size = int(raw_page_size)
+            except ValueError:
+                requested_size = default_page_size
+            requested_size = min(max(requested_size, 1), max_page_size)
+        elif raw_page is not None:
+            requested_size = default_page_size
+        else:
+            requested_size = min(max(queryset.count(), 1), max_page_size)
+
+        paginator.page_size = requested_size
+        page = paginator.paginate_queryset(queryset, request, view=self)
+        serializer = self.get_serializer(page, many=True)
+        site_options = list(
+            queryset.exclude(site__isnull=True)
+            .exclude(site='')
+            .order_by()
+            .values_list('site', flat=True)
+            .distinct()
+        )
+        return Response({
+            'count': paginator.page.paginator.count,
+            'next': paginator.get_next_link(),
+            'previous': paginator.get_previous_link(),
+            'page': paginator.page.number,
+            'page_size': paginator.page.paginator.per_page,
+            'site_options': site_options,
+            'results': serializer.data,
+        })
+
+    def get_serializer_class(self):
+        if getattr(self, 'action', None) == 'list':
+            is_admin_list = (
+                self.request.query_params.get('is_admin_list') == 'true'
+                and self.request.user.is_authenticated
+                and is_staff_user(self.request.user)
+            )
+            return AdminPostListSerializer if is_admin_list else PostListSerializer
+        return PostSerializer
 
     def get_queryset(self):
-        from django.db.models import Count, Q
-        qs = Post.objects.all().order_by('-created_at')
+        from django.db.models import Count, Q, Prefetch
+
         params = self.request.query_params
-        
-        # 메인 목록(list) 조회 시 기본적으로 부모가 없는 대표 기사들만 노출
-        # (단, 관리자가 is_admin_list=true 파라미터로 요청한 경우 자식 노드까지 전부 반환)
+        is_admin_list = (
+            getattr(self, 'action', None) == 'list'
+            and params.get('is_admin_list') == 'true'
+            and self.request.user.is_authenticated
+            and is_staff_user(self.request.user)
+        )
+
+        if is_admin_list:
+            base_queryset = Post.objects.all().select_related('category', 'approved_by', 'rejected_by')
+        else:
+            base_queryset = Post.objects.all().select_related('author', 'category')
+        if is_admin_list:
+            qs = (
+                base_queryset
+                .only(
+                    'id',
+                    'title',
+                    'site',
+                    'source_url',
+                    'category_id',
+                    'category__name',
+                    'status',
+                    'is_summarized',
+                    'created_at',
+                    'approval_requested_at',
+                    'approved_at',
+                    'approved_by__username',
+                    'rejected_at',
+                    'rejected_by__username',
+                    'rejection_reason',
+                    'archived_at',
+                )
+                .order_by('-created_at')
+            )
+        else:
+            qs = (
+                base_queryset
+                .only(
+                    'id',
+                    'title',
+                    'content',
+                    'site',
+                    'source_url',
+                    'category_id',
+                    'author__username',
+                    'is_shared',
+                    'is_summarized',
+                    'status',
+                    'created_at',
+                )
+                .order_by('-created_at')
+            )
+
         if getattr(self, 'action', None) == 'list':
-            is_admin_list = params.get('is_admin_list') == 'true' and self.request.user.is_authenticated and getattr(self.request.user, 'is_staff', False)
             if not is_admin_list:
                 qs = qs.filter(parent_post__isnull=True)
-            qs = qs.annotate(related_count=Count('related_posts'))
+                qs = qs.annotate(
+                    related_count=Count('related_posts', distinct=True),
+                    cve_count=Count('cve_mentions', distinct=True),
+                )
+            else:
+                qs = qs.annotate(related_count=Count('related_posts', distinct=True))
         else:
-            qs = qs.annotate(related_count=Count('related_posts'))
+            qs = (
+                qs
+                .prefetch_related(
+                    'comments__author',
+                    Prefetch(
+                        'cve_mentions',
+                        queryset=PostCveMention.objects.select_related('cve').all(),
+                    ),
+                    'related_posts',
+                )
+                .annotate(related_count=Count('related_posts'))
+            )
 
-        # 고급 검색 필터 적용
-        params = self.request.query_params
         search_query = params.get('search')
         if search_query:
             qs = qs.filter(Q(title__icontains=search_query) | Q(content__icontains=search_query))
-        
+
         site = params.get('site')
         if site:
             qs = qs.filter(site__iexact=site)
-            
+
+        category = params.get('category')
+        if category:
+            qs = qs.filter(category_id=category)
+
         start_date = params.get('start_date')
         if start_date:
             qs = qs.filter(created_at__gte=start_date + 'T00:00:00Z')
-            
+
         end_date = params.get('end_date')
         if end_date:
             qs = qs.filter(created_at__lte=end_date + 'T23:59:59Z')
-            
+
         is_summarized = params.get('is_summarized')
         if is_summarized and is_summarized.lower() == 'true':
             qs = qs.filter(is_summarized=True)
-            
+
         is_shared = params.get('is_shared')
         if is_shared and is_shared.lower() == 'true':
             qs = qs.filter(is_shared=True)
 
-        # 권한별 노출 설정 (임시저장)
+        post_status = params.get('status')
+        if post_status:
+            qs = qs.filter(status=post_status)
+
+        cve_id = params.get('cve')
+        if cve_id:
+            qs = qs.filter(cve_mentions__cve__cve_id__iexact=cve_id)
+
+        mine_only = params.get('mine') == 'true'
+        if mine_only and self.request.user.is_authenticated:
+            qs = qs.filter(author=self.request.user)
+
         if self.request.user.is_authenticated:
-            return qs.filter(Q(is_draft=False) | Q(author=self.request.user))
-        return qs.filter(is_draft=False)
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+            if is_staff_user(self.request.user):
+                return qs.distinct()
+            return qs.filter(Q(status='published') | Q(author=self.request.user)).distinct()
+        return qs.filter(status='published').distinct()
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        is_admin_list = (
+            request.query_params.get('is_admin_list') == 'true'
+            and request.user.is_authenticated
+            and is_staff_user(request.user)
+        )
+        if not is_admin_list:
+            return self._list_response(request, queryset, default_page_size=24, max_page_size=200)
+
+        return self._list_response(request, queryset, default_page_size=50, max_page_size=200)
+
+    def perform_update(self, serializer):
+        from rest_framework.exceptions import PermissionDenied
+        from rest_framework.exceptions import ValidationError
+
+        post = serializer.instance
+        is_owner = post.author_id == self.request.user.id
+
+        if not is_staff_user(self.request.user):
+            if not is_owner:
+                raise PermissionDenied("You do not have permission to edit this post.")
+            if post.status not in ['draft', 'rejected']:
+                raise PermissionDenied("Only draft or rejected posts can be edited.")
+
+        content = serializer.validated_data.get('content', post.content)
+        sanitized_content = sanitize_rich_text(content)
+        if not strip_tags(sanitized_content).strip():
+            raise ValidationError({"content": "This field may not be blank."})
+
+        save_kwargs = {'content': sanitized_content}
+        requested_is_draft = serializer.validated_data.get('is_draft')
+        if requested_is_draft is not None and not is_staff_user(self.request.user) and is_owner:
+            _apply_post_status(post, 'draft' if requested_is_draft else 'review', actor=self.request.user)
+            save_kwargs.update({
+                'status': post.status,
+                'approval_requested_at': post.approval_requested_at,
+                'approved_by': post.approved_by,
+                'approved_at': post.approved_at,
+                'rejected_by': post.rejected_by,
+                'rejected_at': post.rejected_at,
+                'rejection_reason': post.rejection_reason,
+                'archived_at': post.archived_at,
+                'is_draft': post.is_draft,
+            })
+
+        updated_post = serializer.save(**save_kwargs)
+        sync_post_cve_mentions(updated_post)
+
+    def perform_destroy(self, instance):
+        from rest_framework.exceptions import PermissionDenied
+        if not is_admin_user(self.request.user):
+            raise PermissionDenied("You do not have permission to delete this post.")
+        instance.delete()
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        from rest_framework.exceptions import ValidationError
+
+        sanitized_content = sanitize_rich_text(serializer.validated_data.get('content', ''))
+        if not strip_tags(sanitized_content).strip():
+            raise ValidationError({"content": "This field may not be blank."})
+
+        requested_is_draft = bool(serializer.validated_data.get('is_draft', False))
+        if is_staff_user(self.request.user):
+            initial_status = 'draft' if requested_is_draft else 'published'
+        else:
+            initial_status = 'draft' if requested_is_draft else 'review'
+
+        save_kwargs = {
+            'author': self.request.user,
+            'content': sanitized_content,
+            'status': initial_status,
+            'is_draft': initial_status != 'published',
+        }
+
+        if initial_status == 'review':
+            save_kwargs['approval_requested_at'] = timezone.now()
+        elif initial_status == 'published':
+            save_kwargs['approved_by'] = self.request.user
+            save_kwargs['approved_at'] = timezone.now()
+
+        created_post = serializer.save(**save_kwargs)
+        sync_post_cve_mentions(created_post)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def add_comment(self, request, pk=None):
@@ -208,87 +604,182 @@ class PostViewSet(viewsets.ModelViewSet):
         serializer = CommentSerializer(comment)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=['get', 'put', 'delete'], permission_classes=[permissions.AllowAny])
+    @action(detail=True, methods=['get', 'post', 'put', 'delete'], permission_classes=[permissions.IsAuthenticatedOrReadOnly])
     def summarize(self, request, pk=None):
+        from rest_framework.exceptions import PermissionDenied
+
         post = self.get_object()
-        
+
         if request.method == 'GET':
-            # Already summarized?
+            if not post.summary:
+                return Response({'error': 'Summary not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'summary': post.summary}, status=status.HTTP_200_OK)
+
+        if not request.user.is_authenticated or (request.user.id != post.author_id and not request.user.is_staff):
+            raise PermissionDenied("You do not have permission to modify the summary.")
+
+        if request.method == 'POST':
             if post.summary:
                 return Response({'summary': post.summary}, status=status.HTTP_200_OK)
 
-            config = AIConfig.get_config()
-            api_key = os.environ.get('OPENAI_API_KEY', '')
+            try:
+                summary_payload = generate_summary_payload(post)
+            except RuntimeError as exc:
+                return Response({'error': str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            except (json.JSONDecodeError, ValueError) as exc:
+                return Response({'error': f'Invalid AI summary output: {exc}'}, status=status.HTTP_502_BAD_GATEWAY)
+            except Exception as exc:
+                return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
 
-            if not api_key or api_key.startswith('sk-dummy'):
-                # Fallback mock when no real key
-                sentences = re.split(r'(?<=[.!?]) +', post.content)
-                mock_summary = ' '.join(sentences[:2]) if sentences else post.content
-                summary_text = f'🤖 [Mock] AI Summary: {mock_summary}...'
-            else:
-                try:
-                    client = OpenAI(api_key=api_key)
-                    # Convert HTML to plain text to reduce token usage
-                    plain_content = html_to_plain(post.content)
-                    response = client.chat.completions.create(
-                        model=config.model,
-                        messages=[
-                            {'role': 'system', 'content': config.system_prompt},
-                            {'role': 'user', 'content': f'Article:\n{plain_content}'},
-                        ],
-                        max_tokens=config.max_tokens,
-                        temperature=config.temperature,
-                    )
-                    raw = response.choices[0].message.content or ''
-                    # Strip markdown code fences if present
-                    clean = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip(), flags=re.MULTILINE)
-                    # Validate JSON; store raw string if parsing fails
-                    try:
-                        parsed = json.loads(clean)
-                        summary_text = json.dumps(parsed, ensure_ascii=False)
-                    except json.JSONDecodeError:
-                        summary_text = clean
-                except Exception as e:
-                    return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
-
-            post.summary = summary_text
+            post.summary = json.dumps(summary_payload, ensure_ascii=False)
             post.is_summarized = True
             post.save(update_fields=['summary', 'is_summarized'])
-            return Response({'summary': summary_text}, status=status.HTTP_200_OK)
-        
-        # Authentication required for PUT/DELETE
-        if not request.user.is_authenticated or request.user.id != post.author.id:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied("You do not have permission to modify the summary.")
+            sync_post_cve_mentions(post)
+            return Response({'summary': post.summary}, status=status.HTTP_200_OK)
 
         if request.method == 'PUT':
             summary_content = request.data.get('summary')
             if summary_content is None:
                 return Response({'error': 'summary required'}, status=status.HTTP_400_BAD_REQUEST)
-            if summary_content.lstrip().startswith('{'):
+
+            if isinstance(summary_content, dict):
                 try:
-                    parsed = json.loads(summary_content)
-                    post.summary = json.dumps(parsed, ensure_ascii=False)
-                except json.JSONDecodeError:
-                    post.summary = sanitize_rich_text(summary_content)
+                    normalized = normalize_summary_payload(summary_content)
+                    post.summary = json.dumps(normalized, ensure_ascii=False)
+                except ValueError as exc:
+                    return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             else:
-                post.summary = sanitize_rich_text(summary_content)
+                summary_text = str(summary_content).strip()
+                if summary_text.startswith('{'):
+                    try:
+                        parsed = json.loads(summary_text)
+                        normalized = normalize_summary_payload(parsed)
+                        post.summary = json.dumps(normalized, ensure_ascii=False)
+                    except (json.JSONDecodeError, ValueError) as exc:
+                        return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+                else:
+                    clean_summary = strip_tags(summary_text).strip()
+                    if not clean_summary:
+                        return Response({'error': 'summary required'}, status=status.HTTP_400_BAD_REQUEST)
+                    post.summary = clean_summary
+
             post.is_summarized = True
             post.save(update_fields=['summary', 'is_summarized'])
+            sync_post_cve_mentions(post)
             return Response({'summary': post.summary}, status=status.HTTP_200_OK)
-            
+
         if request.method == 'DELETE':
-            post.summary = ""
+            post.summary = ''
             post.is_summarized = False
             post.save(update_fields=['summary', 'is_summarized'])
+            sync_post_cve_mentions(post)
             return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def toggle_share(self, request, pk=None):
+        from rest_framework.exceptions import PermissionDenied
+
         post = self.get_object()
+        if not is_staff_user(request.user):
+            raise PermissionDenied("Only staff can curate this post.")
         post.is_shared = not post.is_shared
         post.save(update_fields=['is_shared'])
         return Response({'is_shared': post.is_shared}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def submit_for_review(self, request, pk=None):
+        from rest_framework.exceptions import PermissionDenied
+
+        post = self.get_object()
+        if post.author_id != request.user.id and not is_staff_user(request.user):
+            raise PermissionDenied("You do not have permission to submit this post.")
+        if post.status not in ['draft', 'rejected']:
+            return Response({'error': 'Only draft or rejected posts can be submitted for review.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        _apply_post_status(post, 'review', actor=request.user)
+        post.save(update_fields=[
+            'status',
+            'is_draft',
+            'approval_requested_at',
+            'approved_by',
+            'approved_at',
+            'rejected_by',
+            'rejected_at',
+            'rejection_reason',
+            'archived_at',
+        ])
+        return Response({'status': post.status}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsStaffUser])
+    def approve(self, request, pk=None):
+        post = self.get_object()
+        if post.status != 'review':
+            return Response({'error': 'Only posts in review can be approved.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        _apply_post_status(post, 'published', actor=request.user)
+        post.save(update_fields=[
+            'status',
+            'is_draft',
+            'approved_by',
+            'approved_at',
+            'rejected_by',
+            'rejected_at',
+            'rejection_reason',
+            'archived_at',
+        ])
+        return Response({'status': post.status}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsStaffUser])
+    def reject(self, request, pk=None):
+        post = self.get_object()
+        if post.status != 'review':
+            return Response({'error': 'Only posts in review can be rejected.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        reason = (request.data.get('reason') or '').strip()
+        _apply_post_status(post, 'rejected', actor=request.user, rejection_reason=reason)
+        post.save(update_fields=[
+            'status',
+            'is_draft',
+            'rejected_by',
+            'rejected_at',
+            'rejection_reason',
+            'archived_at',
+        ])
+        return Response({'status': post.status, 'rejection_reason': post.rejection_reason}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsStaffUser])
+    def archive(self, request, pk=None):
+        post = self.get_object()
+        if post.status == 'archived':
+            return Response({'error': 'Post is already archived.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        _apply_post_status(post, 'archived', actor=request.user)
+        post.save(update_fields=['status', 'is_draft', 'archived_at'])
+        return Response({'status': post.status}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def restore_to_draft(self, request, pk=None):
+        from rest_framework.exceptions import PermissionDenied
+
+        post = self.get_object()
+        if post.author_id != request.user.id and not is_staff_user(request.user):
+            raise PermissionDenied("You do not have permission to restore this post.")
+        if post.status not in ['rejected', 'review', 'archived']:
+            return Response({'error': 'Only rejected, review, or archived posts can be restored.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        _apply_post_status(post, 'draft', actor=request.user)
+        post.save(update_fields=[
+            'status',
+            'is_draft',
+            'approval_requested_at',
+            'approved_by',
+            'approved_at',
+            'rejected_by',
+            'rejected_at',
+            'rejection_reason',
+            'archived_at',
+        ])
+        return Response({'status': post.status}, status=status.HTTP_200_OK)
 
 
 class AIConfigView(APIView):
@@ -296,7 +787,7 @@ class AIConfigView(APIView):
     GET  /api/ai-config/  -> return current AI config (authenticated)
     PUT  /api/ai-config/  -> update AI config (staff only)
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsSuperUser]
 
     def get(self, request):
         config = AIConfig.get_config()
@@ -304,9 +795,6 @@ class AIConfigView(APIView):
         return Response(serializer.data)
 
     def put(self, request):
-        if not request.user.is_staff:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied('Only staff users can update AI configuration.')
         config = AIConfig.get_config()
         serializer = AIConfigSerializer(config, data=request.data, partial=True)
         if serializer.is_valid():
@@ -320,7 +808,7 @@ class TestClusteringView(APIView):
     POST /api/ai-config/test_clustering/ 
     -> Simulate clustering of recent 50 posts using provided threshold
     """
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsSuperUser]
 
     def post(self, request):
         try:
@@ -330,13 +818,13 @@ class TestClusteringView(APIView):
 
         import numpy as np
         
-        # 최근 임베딩이 존재하는 50개 포스트 ('News' 카테고리 한정, 생성 시간 역순으로 가져옴)
+        # ?轅붽틓????彛???????밸븶???????????곗뒭??????棺堉?댆洹ⓦ럹?50???????('News' ???ㅳ늾???雅?퍔瑗?????숈?????癲ル슢???? ???袁⑸즴???????????????????????ル봿????꿔꺂????紐꺪?
         posts_qs = Post.objects.filter(
             embedding__isnull=False, 
             category__name__iexact='news'
         ).order_by('-created_at')[:50]
         posts = list(posts_qs)
-        # 시간순 시뮬레이션을 위해 역순(과거->최신)으로 정렬
+        # ?????????????濚밸Ŧ援잏몭????蹂κ텤??????袁ｋ쨨????????潁???>?轅붽틓????彛????????????꿔꺂???影??
         posts.reverse()
 
         if not posts:
@@ -354,10 +842,10 @@ class TestClusteringView(APIView):
             best_dist = 1.0
             best_parent_id = None
             
-            # 과거(자신보다 i가 작은) 포스트들과 비교
+            # ??潁??????癲ル슢理???貫????i???ル봿?? ???) ?????꿔꺂???癰귥쥓夷???????
             for j in range(i):
                 prev_p = posts[j]
-                # 이미 누군가의 자식이 된 포스트는 대장이 아님
+                # ???? ????袁ㅻ쇀???紐꽷????쎛?????癲?????????꿔꺂???癰?彛????????????밸븶?癲?
                 if virtual_parents[prev_p.id] is None:
                     prev_vec = np.array(prev_p.embedding)
                     dist = cosine_dist(p_vec, prev_vec)
@@ -369,7 +857,7 @@ class TestClusteringView(APIView):
             if best_parent_id is not None:
                 virtual_parents[p.id] = best_parent_id
 
-        # 그룹화 결과 조립
+        # ????얠뺏癲??節뉖뙕????β뼯援???????곗뒭????
         clusters = {}
         for p in posts:
             parent_id = virtual_parents[p.id]
@@ -378,7 +866,7 @@ class TestClusteringView(APIView):
             else:
                 clusters[parent_id]['children'].append(p.title)
 
-        # 자식이 1개 이상 있는 (실제 이슈 그룹) 클러스터만 추출
+        # ???癲??1???????鶯???????뀀땽 (???濚밸Ŧ?김???????욱룏? ????얠뺏癲??節뉖뙕? ????????ш끽維?猿놁녇?????살퓢癲??
         result = [c for c in clusters.values() if len(c['children']) > 0]
         unclustered_count = sum(1 for c in clusters.values() if len(c['children']) == 0)
 
@@ -393,7 +881,7 @@ class AIModelsView(APIView):
     """
     GET /api/ai-models/ -> return list of available OpenAI models
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsSuperUser]
 
     def get(self, request):
         api_key = os.environ.get('OPENAI_API_KEY', '')
@@ -444,72 +932,180 @@ class AIModelsView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 
-# ─── Crawler Views ────────────────────────────────────────────────────────────
+# ?????? Crawler Views ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
 class CrawlerSourceViewSet(viewsets.ModelViewSet):
-    """크롤러 소스 CRUD + 즉시 크롤 실행 + 로그 조회"""
+    """Crawler source CRUD, manual crawl, preview, and log access."""
+
     queryset = CrawlerSource.objects.all().order_by('-created_at')
     serializer_class = CrawlerSourceSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [IsSuperUser]
 
     def get_permissions(self):
-        """목록은 누구나 조회, 쓰기 작업 및 크롤 실행은 staff만 허용"""
-        if self.action in ['list', 'retrieve']:
-            return [permissions.AllowAny()]
-        if self.action in ['logs']:
-            return [permissions.IsAuthenticated()]
-        return [permissions.IsAdminUser()]
+        return [IsSuperUser()]
 
     @action(detail=True, methods=['post'])
     def crawl(self, request, pk=None):
-        """즉시 크롤링 실행"""
+        """Run a crawl immediately for the selected source."""
         source = self.get_object()
+        try:
+            validate_crawler_request_config(source)
+        except CrawlerSecurityError as exc:
+            return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+
         if not source.is_active:
-            return Response({'error': '비활성화된 소스입니다.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Source is inactive.'}, status=status.HTTP_400_BAD_REQUEST)
+
         from .crawler import run_crawl
+
         result = run_crawl(source, triggered_by='manual')
         if result['status'] == 'running':
             return Response(result, status=status.HTTP_409_CONFLICT)
         if result['status'] == 'error':
-            return Response(result, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({'status': 'error', 'error': 'Crawl failed.'}, status=status.HTTP_502_BAD_GATEWAY)
         return Response(result)
 
     @action(detail=True, methods=['get'])
     def logs(self, request, pk=None):
-        """크롤 로그 최근 20건 조회"""
+        """Return the latest crawl logs for this source."""
         source = self.get_object()
-        logs = source.logs.all()[:20]
+        logs = source.logs.only(
+            'id',
+            'source_id',
+            'status',
+            'articles_found',
+            'articles_created',
+            'error_message',
+            'triggered_by',
+            'attempt_count',
+            'duration_seconds',
+            'crawled_at',
+        )[:20]
         return Response(CrawlerLogSerializer(logs, many=True).data)
+
+    @action(detail=True, methods=['get'])
+    def runs(self, request, pk=None):
+        """Return the latest crawl runs for this source."""
+        source = self.get_object()
+        runs = source.runs.annotate(item_count=Count('items')).only(
+            'id',
+            'source_id',
+            'triggered_by',
+            'status',
+            'started_at',
+            'finished_at',
+            'attempt_count',
+            'articles_found',
+            'articles_created',
+            'duplicate_count',
+            'filtered_count',
+            'error_count',
+            'duration_seconds',
+            'error_message',
+        )[:20]
+        return Response(CrawlRunSerializer(runs, many=True).data)
 
     @action(detail=False, methods=['post'])
     def preview(self, request):
-        """저장 없이 현재 설정으로 크롤 결과를 미리봅니다."""
+        """Preview crawl results without saving posts."""
         from .crawler import preview_crawl
+
         data = request.data
         if not data.get('url'):
-            return Response({'error': 'URL이 필요합니다.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'URL is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_crawler_request_config(data)
+        except CrawlerSecurityError as exc:
+            return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+
         result = preview_crawl(data, limit=10)
         if result['status'] == 'error':
-            return Response(result, status=status.HTTP_502_BAD_GATEWAY)
+            return Response({'status': 'error', 'error': 'Preview failed.'}, status=status.HTTP_502_BAD_GATEWAY)
         return Response(result)
+class CrawlerRunViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CrawlRun.objects.select_related('source').annotate(item_count=Count('items')).all().order_by('-started_at')
+    serializer_class = CrawlRunSerializer
+    permission_classes = [IsSuperUser]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        source_id = self.request.query_params.get('source')
+        if source_id:
+            queryset = queryset.filter(source_id=source_id)
+        return queryset
+
+    @action(detail=True, methods=['get'])
+    def items(self, request, pk=None):
+        crawl_run = self.get_object()
+        items = crawl_run.items.select_related('post').all()
+        return Response(CrawlItemSerializer(items, many=True).data)
 
 
-# ─── Dashboard ────────────────────────────────────────────────────────────────
+class CveRecordViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = CveRecord.objects.all()
+    serializer_class = CveRecordSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_serializer_class(self):
+        return AdminCveRecordSerializer if is_staff_user(self.request.user) else CveRecordSerializer
+
+    def get_queryset(self):
+        queryset = (
+            CveRecord.objects.annotate(
+                post_count=Count(
+                    'post_mentions__post',
+                    filter=Q(post_mentions__post__status='published'),
+                    distinct=True,
+                )
+            )
+            .all()
+            .order_by('-mention_count', '-last_seen', 'cve_id')
+        )
+        params = self.request.query_params
+
+        cve_id = params.get('q')
+        if cve_id:
+            queryset = queryset.filter(cve_id__icontains=cve_id)
+
+        severity = params.get('severity')
+        if severity:
+            queryset = queryset.filter(severity__iexact=severity)
+
+        tracked = params.get('tracked')
+        if is_staff_user(self.request.user):
+            if tracked == 'true':
+                queryset = queryset.filter(is_tracked=True)
+            elif tracked == 'false':
+                queryset = queryset.filter(is_tracked=False)
+
+        return queryset
+
+    @action(detail=True, methods=['get'])
+    def posts(self, request, pk=None):
+        cve = self.get_object()
+        posts = (
+            Post.objects.filter(cve_mentions__cve=cve, status='published')
+            .select_related('author', 'category')
+            .order_by('-published_at', '-created_at')
+            .distinct()
+        )
+        return Response(PostSerializer(posts, many=True, context={'request': request}).data)
+
 
 class DashboardView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get(self, request):
-        from django.utils import timezone
+        from collections import Counter
+        from datetime import timedelta
+
         from django.db.models import Count
         from django.db.models.functions import TruncDate
-        from datetime import timedelta
-        from collections import Counter
-        import re as re_module
+        from django.utils import timezone
 
         period = request.query_params.get('period', 'week')
-        now = timezone.now()
         days = 7 if period == 'week' else 30
+        now = timezone.now()
         since = now - timedelta(days=days)
         prev_since = since - timedelta(days=days)
 
@@ -517,19 +1113,20 @@ class DashboardView(APIView):
         period_posts = posts_qs.filter(created_at__gte=since)
         prev_period_posts = posts_qs.filter(created_at__gte=prev_since, created_at__lt=since)
 
-        # ── 요약 통계 ──────────────────────────────────────────────────────────
-        active_sources = CrawlerSource.objects.filter(is_active=True).count()
+        is_admin = is_admin_user(request.user)
         last_log = CrawlerLog.objects.order_by('-crawled_at').first()
         summary = {
             'total_posts': posts_qs.count(),
             'period_posts': period_posts.count(),
             'prev_period_posts': prev_period_posts.count(),
-            'active_sources': active_sources,
-            'total_sources': CrawlerSource.objects.count(),
             'last_crawled_at': last_log.crawled_at.isoformat() if last_log else None,
         }
+        if is_admin:
+            summary.update({
+                'active_sources': CrawlerSource.objects.filter(is_active=True).count(),
+                'total_sources': CrawlerSource.objects.count(),
+            })
 
-        # ── 일별 수집량 트렌드 (최근 days일) ────────────────────────────────────
         daily_qs = (
             posts_qs.filter(created_at__gte=now - timedelta(days=days))
             .annotate(date=TruncDate('created_at'))
@@ -538,129 +1135,121 @@ class DashboardView(APIView):
             .order_by('date')
         )
 
-        # 날짜별로 카테고리 수집량 집계
-        daily_map: dict = {}
+        daily_map: dict[str, dict] = {}
         for row in daily_qs:
-            d = str(row['date'])
-            cat = row['category__name'] or '미분류'
-            cnt = row['count']
-            if d not in daily_map:
-                daily_map[d] = {'date': d, 'total': 0}
-            daily_map[d][cat] = daily_map[d].get(cat, 0) + cnt
-            daily_map[d]['total'] += cnt
+            date_key = str(row['date'])
+            category_name = row['category__name'] or 'Uncategorized'
+            if date_key not in daily_map:
+                daily_map[date_key] = {'date': date_key, 'total': 0}
+            daily_map[date_key][category_name] = daily_map[date_key].get(category_name, 0) + row['count']
+            daily_map[date_key]['total'] += row['count']
 
-        # days 범위 전체 날짜 채우기 (데이터 없는 날 = 0)
         daily_trend = []
-        for i in range(days):
-            d = str((now - timedelta(days=days - 1 - i)).date())
-            daily_trend.append(daily_map.get(d, {'date': d, 'total': 0}))
+        for index in range(days):
+            date_key = str((now - timedelta(days=days - 1 - index)).date())
+            daily_trend.append(daily_map.get(date_key, {'date': date_key, 'total': 0}))
 
-        # ── 카테고리별 분포 (이번 기간 vs 이전 기간) ─────────────────────────────
         cat_this = (
             period_posts.values('category__name')
             .annotate(count=Count('id'))
             .order_by('-count')
         )
-        cat_prev = (
-            prev_period_posts.values('category__name')
-            .annotate(count=Count('id'))
-        )
-        prev_map = {r['category__name']: r['count'] for r in cat_prev}
+        cat_prev = prev_period_posts.values('category__name').annotate(count=Count('id'))
+        prev_map = {row['category__name']: row['count'] for row in cat_prev}
         category_dist = [
             {
-                'name': r['category__name'] or '미분류',
-                'current': r['count'],
-                'prev': prev_map.get(r['category__name'], 0),
+                'name': row['category__name'] or 'Uncategorized',
+                'current': row['count'],
+                'prev': prev_map.get(row['category__name'], 0),
             }
-            for r in cat_this
+            for row in cat_this
         ]
 
-        # ── 급상승 키워드 ─────────────────────────────────────────────────────
-        STOP_WORDS = {
-            '이', '그', '저', '것', '수', '등', '및', '또', '더', '의', '를', '이',
-            '가', '은', '는', '에', '서', '로', '와', '과', '도', '만', '에서',
-            '하는', '하고', '있는', '있다', '했다', '한다', '이다', '되는', '된다',
-            'the', 'a', 'an', 'in', 'of', 'to', 'for', 'is', 'on', 'at', 'by',
-            '보안', '기사', '뉴스', '관련', '발표', '공개', '업데이트', '통해',
+        stop_words = {
+            'the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'over', 'under',
+            'news', 'report', 'update', 'analysis', 'today', 'after', 'before', 'about',
+            'article', 'security', 'market', 'public', 'system', 'issue', 'group', 'state',
         }
-        MIN_WORD_LEN = 2
 
         def extract_keywords(titles):
             words = []
-            for t in titles:
-                tokens = re_module.findall(r'[가-힣a-zA-Z]{2,}', t)
-                words.extend([w for w in tokens if w not in STOP_WORDS and len(w) >= MIN_WORD_LEN])
+            for title in titles:
+                tokens = re.findall(r'[A-Za-z]{2,}', title or '')
+                words.extend(
+                    token.lower()
+                    for token in tokens
+                    if token.lower() not in stop_words and len(token) >= 2
+                )
             return Counter(words)
 
-        this_titles = list(period_posts.values_list('title', flat=True))
-        prev_titles = list(prev_period_posts.values_list('title', flat=True))
-        this_kw = extract_keywords(this_titles)
-        prev_kw = extract_keywords(prev_titles)
+        this_kw = extract_keywords(list(period_posts.values_list('title', flat=True)))
+        prev_kw = extract_keywords(list(prev_period_posts.values_list('title', flat=True)))
 
         trending = []
-        for word, cnt in this_kw.most_common(50):
-            prev_cnt = prev_kw.get(word, 0)
-            if cnt < 2:
+        for word, count in this_kw.most_common(50):
+            prev_count = prev_kw.get(word, 0)
+            if count < 2:
                 continue
-            if prev_cnt == 0:
-                change_pct = 100
-            else:
-                change_pct = round((cnt - prev_cnt) / prev_cnt * 100)
-            trending.append({'word': word, 'count': cnt, 'prev_count': prev_cnt, 'change_pct': change_pct})
-
-        trending.sort(key=lambda x: x['change_pct'], reverse=True)
+            change_pct = 100 if prev_count == 0 else round((count - prev_count) / prev_count * 100)
+            trending.append({
+                'word': word,
+                'count': count,
+                'prev_count': prev_count,
+                'change_pct': change_pct,
+            })
+        trending.sort(key=lambda item: item['change_pct'], reverse=True)
         trending_keywords = trending[:20]
 
-        # ── 최신 기사 ─────────────────────────────────────────────────────────
         recent_posts = list(
             period_posts.filter(parent_post__isnull=True)
             .select_related('category')
             .annotate(related_count=Count('related_posts'))
             .order_by('-created_at')[:20]
-            .values('id', 'title', 'site', 'source_url', 'created_at', 'category__name', 'related_count')
+            .values('id', 'title', 'site', 'created_at', 'category__name', 'related_count')
         )
-        for p in recent_posts:
-            p['created_at'] = p['created_at'].isoformat()
-            p['category'] = p.pop('category__name') or '미분류'
+        for post in recent_posts:
+            post['created_at'] = post['created_at'].isoformat()
+            post['category'] = post.pop('category__name') or 'Uncategorized'
 
-        # ── 시맨틱 트렌드 버블 차트 (PCA 2D 매핑) ──────────────────────────────
+        top_cves = list(
+            CveRecord.objects.annotate(post_count=Count('post_mentions', distinct=True))
+            .filter(post_mentions__post__status='published')
+            .values('cve_id', 'severity', 'cvss_score', 'mention_count', 'last_seen', 'post_count')
+            .order_by('-post_count', '-mention_count', '-last_seen', 'cve_id')
+            .distinct()[:10]
+        )
+        for row in top_cves:
+            row['last_seen'] = row['last_seen'].isoformat() if row['last_seen'] else None
+
         bubble_data = []
-        try:
-            from sklearn.decomposition import PCA
-            import numpy as np
-            
-            # 이슈 병합이 완료된 대표 기사(parent_post 없는)만 시각화 포인트로 사용
-            cluster_posts = list(
-                period_posts.filter(parent_post__isnull=True, embedding__isnull=False)
-                .annotate(related_count=Count('related_posts'))
-                .values('id', 'title', 'embedding', 'related_count', 'category__name')
-            )
-            
-            # 최소 3~4개의 데이터가 모여야 PCA 2차원 축소가 의미 있음
-            if len(cluster_posts) >= 2:
-                embeddings = np.array([p['embedding'] for p in cluster_posts])
-                
-                # 데이터 개수보다 작은 차원으로만 축소 가능
-                n_components = min(2, len(cluster_posts))
-                if n_components >= 1:
-                    pca = PCA(n_components=n_components)
+        if is_admin:
+            try:
+                import numpy as np
+                from sklearn.decomposition import PCA
+
+                cluster_posts = list(
+                    period_posts.filter(parent_post__isnull=True, embedding__isnull=False)
+                    .annotate(related_count=Count('related_posts'))
+                    .values('id', 'title', 'embedding', 'related_count', 'category__name')
+                )
+
+                if len(cluster_posts) >= 2:
+                    embeddings = np.array([post['embedding'] for post in cluster_posts])
+                    pca = PCA(n_components=min(2, len(cluster_posts)))
                     coords = pca.fit_transform(embeddings)
 
-                    for idx, p in enumerate(cluster_posts):
-                        x_coord = round(float(coords[idx][0]), 3) if coords.shape[1] > 0 else 0
-                        y_coord = round(float(coords[idx][1]), 3) if coords.shape[1] > 1 else 0
-                        
+                    for index, post in enumerate(cluster_posts):
                         bubble_data.append({
-                            'id': p['id'],
-                            'title': p['title'],
-                            'x': x_coord,
-                            'y': y_coord,
-                            'z': p['related_count'] * 15 + 20, # r 반경: 자식 기사가 많을수록 크게 렌더링
-                            'related_count': p['related_count'],
-                            'category': p['category__name'] or '미분류'
+                            'id': post['id'],
+                            'title': post['title'],
+                            'x': round(float(coords[index][0]), 3) if coords.shape[1] > 0 else 0,
+                            'y': round(float(coords[index][1]), 3) if coords.shape[1] > 1 else 0,
+                            'z': post['related_count'] * 15 + 20,
+                            'related_count': post['related_count'],
+                            'category': post['category__name'] or 'Uncategorized',
                         })
-        except Exception as e:
-            print(f"[Dashboard API] PCA Error: {e}")
+            except Exception as exc:
+                print(f'[Dashboard API] PCA Error: {exc}')
 
         return Response({
             'summary': summary,
@@ -668,5 +1257,6 @@ class DashboardView(APIView):
             'category_dist': category_dist,
             'trending_keywords': trending_keywords,
             'recent_posts': recent_posts,
+            'top_cves': top_cves,
             'bubble_data': bubble_data,
         })

@@ -10,6 +10,7 @@ export interface AuthUser {
     username: string;
     email: string;
     is_staff: boolean;
+    is_superuser: boolean;
 }
 
 export interface LoginCredentials {
@@ -35,14 +36,25 @@ export interface CreatePostPayload {
     is_draft: boolean;
 }
 
+export type PostStatus = 'draft' | 'review' | 'rejected' | 'published' | 'archived';
+
+export interface PostWorkflowResult {
+    status: PostStatus;
+    rejection_reason?: string;
+}
+
 export function getErrorMessage(error: unknown, fallback = "Unexpected error"): string {
     return error instanceof Error ? error.message : fallback;
 }
 
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
+    const accessToken = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
     let res = await fetch(url, options);
     if (res.status === 401 && typeof window !== 'undefined') {
         const refreshToken = localStorage.getItem('refresh_token');
+        if (!accessToken && !refreshToken) {
+            return res;
+        }
         if (refreshToken) {
             try {
                 const refreshRes = await fetch(`${API_URL}/token/refresh/`, {
@@ -103,6 +115,41 @@ export interface Comment {
     created_at: string;
 }
 
+export interface CveMention {
+    id: number;
+    cve: number;
+    cve_id: string;
+    severity: string;
+    cvss_score: number | null;
+    mention_count: number;
+    legacy_mention_count: number;
+    vendor: string;
+    product: string;
+    mentioned_in: 'title' | 'content' | 'both';
+    legacy_reference_ids: number[];
+    created_at: string;
+}
+
+export interface CveRecord {
+    id: number;
+    cve_id: string;
+    description: string;
+    severity: string;
+    cvss_score: number | null;
+    published_date: string | null;
+    vendor: string;
+    product: string;
+    is_tracked: boolean;
+    notes: string;
+    mention_count: number;
+    legacy_mention_count: number;
+    post_count: number;
+    first_seen: string | null;
+    last_seen: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface Post {
     id: number;
     title: string;
@@ -120,6 +167,16 @@ export interface Post {
     is_summarized: boolean;
     summary: string | null;
     is_draft: boolean;
+    status: PostStatus;
+    approval_requested_at: string | null;
+    approved_by: number | null;
+    approved_by_name?: string;
+    approved_at: string | null;
+    rejected_by: number | null;
+    rejected_by_name?: string;
+    rejected_at: string | null;
+    rejection_reason: string;
+    archived_at: string | null;
     created_at: string;
     updated_at: string;
     views: number;
@@ -133,18 +190,105 @@ export interface Post {
     }[];
     published_at?: string | null;
     iocs?: string[];
+    cve_mentions?: CveMention[];
 }
 
-export async function fetchPosts(filters?: Record<string, string>): Promise<Post[]> {
+export interface PostListItem {
+    id: number;
+    title: string;
+    site: string | null;
+    source_url: string | null;
+    category: number | null;
+    category_name: string;
+    author: {
+        id: number;
+        username: string;
+    };
+    is_shared: boolean;
+    is_summarized: boolean;
+    status: PostStatus;
+    created_at: string;
+    related_count: number;
+    cve_count: number;
+    content_preview: string;
+}
+
+export interface AdminPostListItem {
+    id: number;
+    title: string;
+    site: string | null;
+    source_url: string | null;
+    category: number | null;
+    category_name: string;
+    status: PostStatus;
+    is_summarized: boolean;
+    created_at: string;
+    related_count: number;
+    approval_requested_at: string | null;
+    approved_by_name?: string;
+    approved_at: string | null;
+    rejected_by_name?: string;
+    rejected_at: string | null;
+    rejection_reason: string;
+    archived_at: string | null;
+}
+
+export interface AdminPostsResponse {
+    count: number;
+    next: string | null;
+    previous: string | null;
+    page: number;
+    page_size: number;
+    site_options: string[];
+    results: AdminPostListItem[];
+}
+
+export interface PublicPostsResponse {
+    count: number;
+    next: string | null;
+    previous: string | null;
+    page: number;
+    page_size: number;
+    site_options: string[];
+    results: PostListItem[];
+}
+
+function emptyPublicPostsResponse(page = 1, pageSize = 24): PublicPostsResponse {
+    return {
+        count: 0,
+        next: null,
+        previous: null,
+        page,
+        page_size: pageSize,
+        site_options: [],
+        results: [],
+    };
+}
+
+async function fetchPostsListResponse(
+    filters?: Record<string, string>,
+    options?: {
+        authRequired?: boolean;
+        page?: number;
+        pageSize?: number;
+        defaultPageSize?: number;
+    },
+): Promise<PublicPostsResponse> {
+    const authRequired = options?.authRequired ?? false;
+    const page = options?.page ?? 1;
+    const defaultPageSize = options?.defaultPageSize ?? 24;
+
     try {
-        let url = `${API_URL}/posts/`;
-        if (filters && Object.keys(filters).length > 0) {
-            const searchParams = new URLSearchParams(filters);
-            url += `?${searchParams.toString()}`;
+        const params = new URLSearchParams(filters || {});
+        if (options?.pageSize !== undefined) {
+            params.set('page', String(page));
+            params.set('page_size', String(options.pageSize));
         }
 
+        const query = params.toString();
+        const url = query ? `${API_URL}/posts/?${query}` : `${API_URL}/posts/`;
         const res = await fetchWithAuth(url, {
-            headers: getHeaders(false),
+            headers: getHeaders(authRequired),
             cache: 'no-store'
         });
         if (res.status === 401) {
@@ -152,20 +296,46 @@ export async function fetchPosts(filters?: Record<string, string>): Promise<Post
             throw new Error("Session expired. Please log in again.");
         }
         if (!res.ok) {
-            console.error('Failed to fetch posts:', await res.text());
-            return [];
+            console.error('Failed to fetch posts response:', await res.text());
+            return emptyPublicPostsResponse(page, options?.pageSize ?? defaultPageSize);
         }
         return res.json();
     } catch (error) {
-        console.error('Error fetching posts:', error);
-        return [];
+        console.error('Error fetching posts response:', error);
+        return emptyPublicPostsResponse(page, options?.pageSize ?? defaultPageSize);
     }
 }
 
-export async function fetchPost(id: string): Promise<Post | null> {
+export async function fetchPosts(filters?: Record<string, string>): Promise<PostListItem[]> {
+    const response = await fetchPostsListResponse(filters, { authRequired: false });
+    return response.results;
+}
+
+export async function fetchPostFeed(
+    filters?: Record<string, string>,
+    page = 1,
+    pageSize = 24,
+): Promise<PublicPostsResponse> {
+    return fetchPostsListResponse(filters, {
+        authRequired: false,
+        page,
+        pageSize,
+        defaultPageSize: pageSize,
+    });
+}
+
+export async function fetchMyPosts(filters?: Record<string, string>): Promise<Post[]> {
+    const response = await fetchPostsListResponse(
+        { ...(filters || {}), mine: 'true', limit: '200' },
+        { authRequired: true, defaultPageSize: 200 },
+    );
+    return response.results as unknown as Post[];
+}
+
+export async function fetchPost(id: string, includeAuth = false): Promise<Post | null> {
     try {
         const res = await fetchWithAuth(`${API_URL}/posts/${id}/`, {
-            headers: getHeaders(false),
+            headers: getHeaders(includeAuth),
             cache: 'no-store'
         });
         if (!res.ok) {
@@ -195,15 +365,27 @@ export async function createPost(postData: CreatePostPayload): Promise<Post> {
     return res.json();
 }
 
-export async function fetchAdminPosts(category?: string | null, search?: string, site?: string, is_summarized?: string, is_shared?: string): Promise<Post[]> {
+export async function fetchAdminPosts(
+    category?: string | null,
+    search?: string,
+    site?: string,
+    is_summarized?: string,
+    is_shared?: string,
+    status?: PostStatus | '',
+    page = 1,
+    pageSize = 50,
+): Promise<AdminPostsResponse> {
     try {
         const params = new URLSearchParams();
         params.append('is_admin_list', 'true');
+        params.append('page', String(page));
+        params.append('page_size', String(pageSize));
         if (category) params.append('category', category);
         if (search) params.append('search', search);
         if (site) params.append('site', site);
         if (is_summarized) params.append('is_summarized', is_summarized);
         if (is_shared) params.append('is_shared', is_shared);
+        if (status) params.append('status', status);
 
         const res = await fetchWithAuth(`${API_URL}/posts/?${params.toString()}`, {
             headers: getHeaders(),
@@ -215,12 +397,28 @@ export async function fetchAdminPosts(category?: string | null, search?: string,
         }
         if (!res.ok) {
             console.error('Failed to fetch admin posts:', await res.text());
-            return [];
+            return {
+                count: 0,
+                next: null,
+                previous: null,
+                page,
+                page_size: pageSize,
+                site_options: [],
+                results: [],
+            };
         }
         return res.json();
     } catch (error) {
         console.error('Error fetching admin posts:', error);
-        return [];
+        return {
+            count: 0,
+            next: null,
+            previous: null,
+            page,
+            page_size: pageSize,
+            site_options: [],
+            results: [],
+        };
     }
 }
 
@@ -302,9 +500,14 @@ export async function deleteComment(commentId: number): Promise<void> {
 
 export async function summarizePost(postId: number): Promise<string> {
     const res = await fetchWithAuth(`${API_URL}/posts/${postId}/summarize/`, {
-        headers: getHeaders(false),
+        method: 'POST',
+        headers: getHeaders(),
         cache: 'no-store'
     });
+    if (res.status === 401) {
+        logout();
+        throw new Error("Session expired. Please log in again.");
+    }
     if (!res.ok) {
         throw new Error(await res.text());
     }
@@ -357,6 +560,98 @@ export async function toggleSharePost(postId: number): Promise<boolean> {
     }
     const data = await res.json();
     return data.is_shared;
+}
+
+export async function fetchCves(filters?: Record<string, string>): Promise<CveRecord[]> {
+    try {
+        let url = `${API_URL}/cves/`;
+        if (filters && Object.keys(filters).length > 0) {
+            const searchParams = new URLSearchParams(filters);
+            url += `?${searchParams.toString()}`;
+        }
+        const res = await fetchWithAuth(url, {
+            headers: getHeaders(false),
+            cache: 'no-store',
+        });
+        if (!res.ok) {
+            console.error('Failed to fetch cves:', await res.text());
+            return [];
+        }
+        return res.json();
+    } catch (error) {
+        console.error('Error fetching cves:', error);
+        return [];
+    }
+}
+
+export async function fetchCve(id: string): Promise<CveRecord | null> {
+    try {
+        const res = await fetchWithAuth(`${API_URL}/cves/${id}/`, {
+            headers: getHeaders(false),
+            cache: 'no-store',
+        });
+        if (!res.ok) {
+            console.error(`Failed to fetch cve ${id}:`, await res.text());
+            return null;
+        }
+        return res.json();
+    } catch (error) {
+        console.error(`Error fetching cve ${id}:`, error);
+        return null;
+    }
+}
+
+export async function fetchCvePosts(id: string): Promise<Post[]> {
+    try {
+        const res = await fetchWithAuth(`${API_URL}/cves/${id}/posts/`, {
+            headers: getHeaders(false),
+            cache: 'no-store',
+        });
+        if (!res.ok) {
+            console.error(`Failed to fetch cve posts ${id}:`, await res.text());
+            return [];
+        }
+        return res.json();
+    } catch (error) {
+        console.error(`Error fetching cve posts ${id}:`, error);
+        return [];
+    }
+}
+
+async function postWorkflowAction(postId: number, action: string, body?: Record<string, unknown>): Promise<PostWorkflowResult> {
+    const res = await fetchWithAuth(`${API_URL}/posts/${postId}/${action}/`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 401) {
+        logout();
+        throw new Error("Session expired. Please log in again.");
+    }
+    if (!res.ok) {
+        throw new Error(await res.text());
+    }
+    return res.json();
+}
+
+export async function submitPostForReview(postId: number): Promise<PostWorkflowResult> {
+    return postWorkflowAction(postId, 'submit_for_review');
+}
+
+export async function approvePost(postId: number): Promise<PostWorkflowResult> {
+    return postWorkflowAction(postId, 'approve');
+}
+
+export async function rejectPost(postId: number, reason: string): Promise<PostWorkflowResult> {
+    return postWorkflowAction(postId, 'reject', { reason });
+}
+
+export async function archivePost(postId: number): Promise<PostWorkflowResult> {
+    return postWorkflowAction(postId, 'archive');
+}
+
+export async function restorePostToDraft(postId: number): Promise<PostWorkflowResult> {
+    return postWorkflowAction(postId, 'restore_to_draft');
 }
 
 export async function fetchCategories(): Promise<Category[]> {
@@ -412,12 +707,18 @@ export function logout() {
 }
 
 export async function fetchProfile(): Promise<AuthUser> {
+    const hasSession =
+        typeof window !== 'undefined' &&
+        Boolean(localStorage.getItem('access_token') || localStorage.getItem('refresh_token'));
+
     const res = await fetchWithAuth(`${API_URL}/users/me/`, {
         headers: getHeaders(),
         cache: 'no-store'
     });
     if (res.status === 401) {
-        logout();
+        if (hasSession) {
+            logout();
+        }
         throw new Error("Session expired. Please log in again.");
     }
     if (!res.ok) {
@@ -634,8 +935,8 @@ export interface DashboardSummary {
     total_posts: number;
     period_posts: number;
     prev_period_posts: number;
-    active_sources: number;
-    total_sources: number;
+    active_sources?: number;
+    total_sources?: number;
     last_crawled_at: string | null;
 }
 
@@ -661,8 +962,7 @@ export interface TrendingKeyword {
 export interface RecentPost {
     id: number;
     title: string;
-    site: string;
-    source_url: string;
+    site: string | null;
     created_at: string;
     category: string;
     related_count: number;
@@ -678,12 +978,22 @@ export interface BubbleData {
     category: string;
 }
 
+export interface TopCve {
+    cve_id: string;
+    severity: string;
+    cvss_score: number | null;
+    mention_count: number;
+    last_seen: string | null;
+    post_count: number;
+}
+
 export interface DashboardData {
     summary: DashboardSummary;
     daily_trend: DailyTrend[];
     category_dist: CategoryDist[];
     trending_keywords: TrendingKeyword[];
     recent_posts: RecentPost[];
+    top_cves: TopCve[];
     bubble_data: BubbleData[];
 }
 

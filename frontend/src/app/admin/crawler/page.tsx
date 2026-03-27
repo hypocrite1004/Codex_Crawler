@@ -263,7 +263,7 @@ export default function CrawlerSourcesPage() {
         const init = async () => {
             try {
                 const user = await fetchProfile();
-                if (!user.is_staff) { router.push('/'); return; }
+                if (!user.is_superuser) { router.push('/'); return; }
                 const [sourceData, categoryData] = await Promise.all([fetchCrawlerSources(), fetchCategories()]);
                 setSources(sourceData);
                 setCategories(categoryData);
