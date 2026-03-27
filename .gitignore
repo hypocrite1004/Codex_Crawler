@@ -6,3 +6,9 @@ backend/__pycache__/
 backend/api/__pycache__/
 backend/config/__pycache__/
 *.pyc
+.codex/
+logs/
+.playwright-cli/
+db/*.gz
+db/*.csv
+db/*.txt

@@ -1,4 +1,7 @@
 @echo off
+echo Starting Local PostgreSQL...
+call start_local_postgres.bat
+
 echo Starting Django Backend...
 start cmd /k "cd backend && call ..\venv\Scripts\activate.bat && python manage.py runserver"
 

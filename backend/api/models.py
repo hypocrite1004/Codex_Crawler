@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.contrib.auth.models import User
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from pgvector.django import VectorField
 
@@ -14,16 +15,33 @@ class Category(models.Model):
         return self.name
 
 class Post(models.Model):
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('review', 'In Review'),
+        ('rejected', 'Rejected'),
+        ('published', 'Published'),
+        ('archived', 'Archived'),
+    ]
+
     title = models.CharField(max_length=255)
     content = models.TextField()
     summary = models.TextField(blank=True, null=True)
     site = models.CharField(max_length=100, blank=True, null=True)
     source_url = models.URLField(max_length=500, blank=True, null=True)
+    normalized_source_url = models.URLField(max_length=500, blank=True, null=True)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='posts')
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='posts')
     is_shared = models.BooleanField(default=False)
     is_summarized = models.BooleanField(default=False)
     is_draft = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='published')
+    approval_requested_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='approved_posts')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='rejected_posts')
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
     published_at = models.DateTimeField(null=True, blank=True, help_text="실제 기사 발행일")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -36,10 +54,25 @@ class Post(models.Model):
         indexes = [
             GinIndex(fields=['title'], opclasses=['gin_trgm_ops'], name='api_post_title_gin'),
             GinIndex(fields=['content'], opclasses=['gin_trgm_ops'], name='api_post_content_gin'),
+            models.Index(
+                fields=['source_url'],
+                name='api_post_source_url_idx',
+                condition=Q(source_url__isnull=False) & ~Q(source_url=''),
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['normalized_source_url'],
+                name='api_post_norm_source_url_uniq',
+                condition=Q(normalized_source_url__isnull=False) & ~Q(normalized_source_url=''),
+            ),
         ]
 
     def __str__(self):
         return self.title
+
+    def sync_legacy_flags(self):
+        self.is_draft = self.status != 'published'
 
 class Comment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
@@ -49,6 +82,68 @@ class Comment(models.Model):
 
     def __str__(self):
         return f'Comment by {self.author.username} on {self.post.title}'
+
+
+class CveRecord(models.Model):
+    cve_id = models.CharField(max_length=50, unique=True)
+    description = models.TextField(blank=True)
+    severity = models.CharField(max_length=20, blank=True)
+    cvss_score = models.FloatField(null=True, blank=True)
+    published_date = models.DateField(null=True, blank=True)
+    vendor = models.CharField(max_length=255, blank=True)
+    product = models.CharField(max_length=255, blank=True)
+    is_tracked = models.BooleanField(default=False)
+    notes = models.TextField(blank=True)
+    mention_count = models.PositiveIntegerField(default=0)
+    legacy_mention_count = models.PositiveIntegerField(default=0)
+    first_seen = models.DateTimeField(null=True, blank=True)
+    last_seen = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-mention_count', '-last_seen', 'cve_id']
+        indexes = [
+            models.Index(fields=['severity', '-last_seen'], name='api_cve_severity_seen_idx'),
+            models.Index(fields=['is_tracked', '-last_seen'], name='api_cve_tracked_seen_idx'),
+            models.Index(fields=['-mention_count', '-last_seen'], name='api_cve_mentions_seen_idx'),
+        ]
+
+    def __str__(self):
+        return self.cve_id
+
+
+class PostCveMention(models.Model):
+    SOURCE_CHOICES = [
+        ('legacy_import', 'Legacy Import'),
+        ('auto_extract', 'Auto Extract'),
+        ('manual', 'Manual'),
+    ]
+    MENTIONED_IN_CHOICES = [
+        ('title', 'Title'),
+        ('content', 'Content'),
+        ('both', 'Both'),
+    ]
+
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='cve_mentions')
+    cve = models.ForeignKey(CveRecord, on_delete=models.CASCADE, related_name='post_mentions')
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='legacy_import')
+    mentioned_in = models.CharField(max_length=20, choices=MENTIONED_IN_CHOICES, default='content')
+    legacy_reference_ids = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['cve__cve_id']
+        constraints = [
+            models.UniqueConstraint(fields=['post', 'cve'], name='api_post_cve_unique'),
+        ]
+        indexes = [
+            models.Index(fields=['post', 'source'], name='api_postcve_post_source_idx'),
+            models.Index(fields=['cve', '-created_at'], name='api_postcve_cve_created_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.post_id}:{self.cve.cve_id}'
 
 
 
@@ -100,6 +195,14 @@ class CrawlerSource(models.Model):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=['is_active', 'is_running', 'last_crawled_at', 'created_at'],
+                name='api_csrc_sched_idx',
+            ),
+        ]
 
     def __str__(self):
         return f'[{self.get_source_type_display()}] {self.name}'
@@ -162,9 +265,75 @@ class CrawlerLog(models.Model):
 
     class Meta:
         ordering = ['-crawled_at']
+        indexes = [
+            models.Index(fields=['source', '-crawled_at'], name='api_clog_source_crawled_idx'),
+            models.Index(fields=['-crawled_at'], name='api_clog_crawled_idx'),
+        ]
 
     def __str__(self):
         return f'{self.source.name} @ {self.crawled_at:%Y-%m-%d %H:%M} [{self.status}]'
+
+
+class CrawlRun(models.Model):
+    STATUS_CHOICES = [
+        ('running', 'Running'),
+        ('success', 'Success'),
+        ('playwright_fallback', 'Playwright Fallback'),
+        ('error', 'Error'),
+    ]
+    TRIGGER_CHOICES = CrawlerLog.TRIGGER_CHOICES
+
+    source = models.ForeignKey(CrawlerSource, on_delete=models.CASCADE, related_name='runs')
+    triggered_by = models.CharField(max_length=20, choices=TRIGGER_CHOICES, default='manual')
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='running')
+    started_at = models.DateTimeField(default=timezone.now)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    attempt_count = models.PositiveSmallIntegerField(default=0)
+    articles_found = models.PositiveIntegerField(default=0)
+    articles_created = models.PositiveIntegerField(default=0)
+    duplicate_count = models.PositiveIntegerField(default=0)
+    filtered_count = models.PositiveIntegerField(default=0)
+    error_count = models.PositiveIntegerField(default=0)
+    duration_seconds = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['source', '-started_at'], name='api_crun_source_started_idx'),
+            models.Index(fields=['-started_at'], name='api_crun_started_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.source.name} run {self.id} [{self.status}]'
+
+
+class CrawlItem(models.Model):
+    ITEM_STATUS_CHOICES = [
+        ('created', 'Created'),
+        ('duplicate', 'Duplicate'),
+        ('filtered', 'Filtered'),
+        ('error', 'Error'),
+    ]
+
+    run = models.ForeignKey(CrawlRun, on_delete=models.CASCADE, related_name='items')
+    post = models.ForeignKey(Post, null=True, blank=True, on_delete=models.SET_NULL, related_name='crawl_items')
+    item_status = models.CharField(max_length=20, choices=ITEM_STATUS_CHOICES)
+    source_url = models.URLField(max_length=500, blank=True)
+    normalized_url = models.URLField(max_length=500, blank=True)
+    title = models.CharField(max_length=255, blank=True)
+    error_message = models.TextField(blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['id']
+        indexes = [
+            models.Index(fields=['run', 'item_status'], name='api_citem_run_status_idx'),
+        ]
+
+    def __str__(self):
+        return f'Run {self.run_id} item {self.id} [{self.item_status}]'
 
 
 class AIConfig(models.Model):

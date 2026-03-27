@@ -1,23 +1,27 @@
 """
-크롤링 엔진
-- RSS/Atom 파싱
-- HTML 스크래핑
-- Playwright 우회
-- 실행 상태 추적, 재시도, 로그 기록
+??鸚룸슚異???釉먯뒭??
+- RSS/Atom ?????
+- HTML ???袁⑹뵫???얜Ŧ已?
+- Playwright ???μ쪠??
+- ????덈틖 ???ㅺ컼????⑤베毓?? ????? ?棺??짆????れ삀??쎈뭄?
 """
 import asyncio
 import logging
 import time
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 from django.contrib.auth.models import User
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
+from .crawler_security import CrawlerSecurityError, validate_crawler_request_config
+from .cve_sync import sync_post_cve_mentions
+
 
 def crawl_rss(source) -> tuple[list[dict], str]:
-    """RSS/Atom 피드를 파싱해 기사 목록을 반환합니다."""
+    """RSS/Atom ???⑤벚???????????れ삀?節놁쒜?癲ル슢?꾤땟戮⑤뭄???袁⑸즵????筌뤾퍓???"""
     import feedparser
     import httpx
 
@@ -37,25 +41,25 @@ def crawl_rss(source) -> tuple[list[dict], str]:
         response.raise_for_status()
         feed = feedparser.parse(response.content)
     except PermissionError as exc:
-        logger.warning(f"[Crawler] RSS 차단 응답 감지, Playwright로 재시도: {source.url}")
+        logger.warning(f"[Crawler] RSS 癲ル슓堉곁땟??????쑩?젆???좊즴??, Playwright??????? {source.url}")
         try:
             xml_text = asyncio.run(_fetch_with_playwright(source.url, as_xml=True))
             feed = feedparser.parse(xml_text)
             status = 'playwright_fallback'
         except Exception as playwright_error:
-            raise ValueError(f"Playwright RSS 우회 실패 ({exc}): {playwright_error}") from playwright_error
+            raise ValueError(f"Playwright RSS ???μ쪠??????됰꽡 ({exc}): {playwright_error}") from playwright_error
     except Exception as exc:
         feed = feedparser.parse(source.url)
         if not getattr(feed, 'entries', []):
-            raise ValueError(f"RSS 로드 실패: {exc}") from exc
+            raise ValueError(f"RSS ?棺??짆?삠궘?????됰꽡: {exc}") from exc
 
     if not getattr(feed, 'entries', []):
-        raise ValueError("RSS 피드에서 항목을 찾지 못했습니다.")
+        raise ValueError("RSS ???⑤벚???????????癲ル슓??젆? 癲ル슢履뉑쾮?彛??????")
 
     items = []
     for entry in feed.entries:
         items.append({
-            'title': entry.get('title', '(제목 없음)').strip(),
+            'title': entry.get('title', '(??筌먯룄肄????⑤챶苡?').strip(),
             'content': (
                 entry.get('content', [{}])[0].get('value', '')
                 or entry.get('summary', '')
@@ -73,7 +77,7 @@ def crawl_rss(source) -> tuple[list[dict], str]:
 
 
 def _clean_soup(soup, exclude_selectors: str = ''):
-    """광고/주변 요소를 제거한 정제된 soup를 반환합니다."""
+    """???뱁꺁????낆뒩?? ??釉먯뒠?????癰귙끋源???嶺뚮Ĳ????soup???袁⑸즵????筌뤾퍓???"""
     auto_remove_tags = ['script', 'style', 'iframe', 'noscript', 'svg']
     auto_remove_selectors = [
         'header', 'footer', 'nav', 'aside',
@@ -106,7 +110,7 @@ def _clean_soup(soup, exclude_selectors: str = ''):
 
 
 def _html_to_markdown(html_text: str) -> str:
-    """HTML 조각을 Markdown 기반 텍스트로 변환합니다."""
+    """HTML ?釉뚰??㉱??Markdown ??れ삀??뫢?????몄릇?嶺뚮ㅎ?붷ㅇ??怨뚮뼚?????????덊렡."""
     if not html_text:
         return ''
 
@@ -126,7 +130,7 @@ def _html_to_markdown(html_text: str) -> str:
 
 
 def _enrich_rss_items(items: list[dict], content_selector: str, exclude_selectors: str = '') -> list[dict]:
-    """각 기사 URL에 접속해 본문을 보강합니다."""
+    """????れ삀?節놁쒜?URL??????????怨뚮옖筌?쑜猷???怨뚮옖?????筌뤾퍓???"""
     import concurrent.futures
 
     import httpx
@@ -137,7 +141,7 @@ def _enrich_rss_items(items: list[dict], content_selector: str, exclude_selector
     except ImportError:
         Article = None
         Config = None
-        logger.warning("newspaper3k가 설치되어 있지 않아 일부 추출 기능을 건너뜁니다.")
+        logger.warning("newspaper3k??좊읈? ????몃???筌뚯슦苑???? ????깅떋 ??? ??⑤베毓????れ삀????癲꾧퀗??????ㅿ폍???")
 
     headers = {'User-Agent': 'Mozilla/5.0 (compatible; SecurNetCrawler/1.0)'}
 
@@ -153,15 +157,15 @@ def _enrich_rss_items(items: list[dict], content_selector: str, exclude_selector
             response.raise_for_status()
             html_raw = response.content
         except PermissionError:
-            logger.warning(f"[Crawler] 상세 페이지 차단 응답 감지, Playwright로 재시도: {url}")
+            logger.warning(f"[Crawler] ???ㅳ늾?????쒓낮?꾬┼??넊? 癲ル슓堉곁땟??????쑩?젆???좊즴??, Playwright??????? {url}")
             try:
                 html_text = asyncio.run(_fetch_with_playwright(url))
                 html_raw = html_text.encode('utf-8', errors='ignore')
             except Exception as playwright_error:
-                logger.warning(f"[Crawler] Playwright 우회 실패 ({url}): {playwright_error}")
+                logger.warning(f"[Crawler] Playwright ???μ쪠??????됰꽡 ({url}): {playwright_error}")
                 return item
         except Exception as exc:
-            logger.warning(f"[Crawler] 상세 페이지 요청 실패 ({url}): {exc}")
+            logger.warning(f"[Crawler] ???ㅳ늾?????쒓낮?꾬┼??넊? ??釉먯뒜??????됰꽡 ({url}): {exc}")
             return item
 
         try:
@@ -207,7 +211,7 @@ def _enrich_rss_items(items: list[dict], content_selector: str, exclude_selector
             if full_text:
                 item = {**item, 'content': full_text, 'content_html': content_html}
         except Exception as exc:
-            logger.warning(f"[Crawler] 본문 파싱 실패 ({url}): {exc}")
+            logger.warning(f"[Crawler] ?怨뚮옖筌?쑜猷??????????됰꽡 ({url}): {exc}")
 
         return item
 
@@ -221,7 +225,7 @@ def _enrich_rss_items(items: list[dict], content_selector: str, exclude_selector
 
 
 def _parse_html(html_data, source, base_url: str) -> list[dict]:
-    """HTML 페이지를 source 설정에 맞춰 파싱합니다."""
+    """HTML ???쒓낮?꾬┼??넊???source ???源놁젳??癲ル슢??????????筌뤾퍓???"""
     import concurrent.futures
 
     from bs4 import BeautifulSoup
@@ -231,7 +235,7 @@ def _parse_html(html_data, source, base_url: str) -> list[dict]:
     except ImportError:
         Article = None
         Config = None
-        logger.warning("newspaper3k가 설치되어 있지 않아 일부 추출 기능을 건너뜁니다.")
+        logger.warning("newspaper3k??좊읈? ????몃???筌뚯슦苑???? ????깅떋 ??? ??⑤베毓????れ삀????癲꾧퀗??????ㅿ폍???")
 
     raw_html_text = html_data.decode('utf-8', errors='ignore') if isinstance(html_data, bytes) else html_data
     soup = BeautifulSoup(raw_html_text, 'lxml')
@@ -323,9 +327,9 @@ def _parse_html(html_data, source, base_url: str) -> list[dict]:
                 try:
                     html_text = asyncio.run(_fetch_with_playwright(full_url))
                 except Exception as playwright_error:
-                    logger.warning(f"[Crawler] Playwright fallback 실패 ({full_url}): {playwright_error}")
+                    logger.warning(f"[Crawler] Playwright fallback ????됰꽡 ({full_url}): {playwright_error}")
             except Exception as exc:
-                logger.warning(f"[Crawler] 기사 HTML 요청 실패 ({full_url}): {exc}")
+                logger.warning(f"[Crawler] ??れ삀?節놁쒜?HTML ??釉먯뒜??????됰꽡 ({full_url}): {exc}")
 
             if html_text:
                 try:
@@ -347,7 +351,7 @@ def _parse_html(html_data, source, base_url: str) -> list[dict]:
                     if article.publish_date:
                         published_at = article.publish_date
                 except Exception as exc:
-                    logger.warning(f"[Crawler] newspaper 파싱 실패 ({full_url}): {exc}")
+                    logger.warning(f"[Crawler] newspaper ?????????됰꽡 ({full_url}): {exc}")
 
         return {
             'title': title,
@@ -370,7 +374,7 @@ def _parse_html(html_data, source, base_url: str) -> list[dict]:
 
 
 async def _fetch_with_httpx(source) -> tuple[bytes, str]:
-    """httpx로 HTML을 가져옵니다. 403은 PermissionError로 전달합니다."""
+    """httpx??HTML????좊읈??嶺뚮ㅎ?닸묾????덊렡. 403?? PermissionError????ш끽維???筌뤾퍓???"""
     import httpx
 
     headers = source.request_headers or {}
@@ -391,7 +395,7 @@ async def _fetch_with_httpx(source) -> tuple[bytes, str]:
 
 
 async def _fetch_with_playwright(url: str, as_xml: bool = False) -> str:
-    """Playwright로 페이지를 가져옵니다."""
+    """Playwright?????쒓낮?꾬┼??넊?????좊읈??嶺뚮ㅎ?닸묾????덊렡."""
     from playwright.async_api import async_playwright
 
     async with async_playwright() as playwright:
@@ -431,14 +435,14 @@ async def _fetch_with_playwright(url: str, as_xml: bool = False) -> str:
 
 
 def crawl_html(source) -> tuple[list[dict], str]:
-    """HTML 스크래핑을 수행합니다."""
+    """HTML ???袁⑹뵫???얜Ŧ已?????얜Ŧ類??筌뤾퍓???"""
     base_url = f"{urlparse(source.url).scheme}://{urlparse(source.url).netloc}"
     status = 'success'
 
     try:
         html_data, _ = asyncio.run(_fetch_with_httpx(source))
     except PermissionError:
-        logger.warning(f"[Crawler] HTML 차단 응답 감지, Playwright로 재시도: {source.url}")
+        logger.warning(f"[Crawler] HTML 癲ル슓堉곁땟??????쑩?젆???좊즴??, Playwright??????? {source.url}")
         html_data = asyncio.run(_fetch_with_playwright(source.url))
         status = 'playwright_fallback'
 
@@ -473,39 +477,150 @@ def _extract_iocs(content: str) -> list[str]:
     return list(set(ips + urls + hashes))
 
 
-def _persist_crawled_items(source, items: list[dict], system_user, get_embedding) -> int:
+def _serialize_payload(item: dict) -> dict:
+    return {
+        key: (value.isoformat() if hasattr(value, 'isoformat') else value)
+        for key, value in item.items()
+    }
+
+
+def normalize_source_url(url: str) -> str:
+    raw = (url or '').strip()
+    if not raw:
+        return ''
+
+    parsed = urlparse(raw)
+    if not parsed.scheme or not parsed.netloc:
+        return raw
+
+    scheme = parsed.scheme.lower()
+    hostname = (parsed.hostname or '').lower()
+    port = parsed.port
+
+    if (scheme == 'http' and port == 80) or (scheme == 'https' and port == 443):
+        port = None
+
+    netloc = hostname
+    if port:
+        netloc = f'{hostname}:{port}'
+
+    path = parsed.path or '/'
+    if path != '/' and path.endswith('/'):
+        path = path.rstrip('/')
+
+    tracking_keys = {
+        'fbclid',
+        'gclid',
+        'mc_cid',
+        'mc_eid',
+        'mkt_tok',
+        '_hsenc',
+        '_hsmi',
+    }
+    query_items = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if not key.lower().startswith('utm_') and key.lower() not in tracking_keys
+    ]
+    query = urlencode(sorted(query_items))
+
+    return urlunparse((scheme, netloc, path, '', query, ''))
+
+
+def _record_crawl_item(run, item_status: str, item: dict, post=None, error_message: str = ''):
+    from .models import CrawlItem
+
+    raw_url = item.get('url', '') or ''
+    normalized_url = normalize_source_url(raw_url)
+    CrawlItem.objects.create(
+        run=run,
+        post=post,
+        item_status=item_status,
+        source_url=raw_url,
+        normalized_url=normalized_url,
+        title=(item.get('title') or '')[:255],
+        error_message=error_message,
+        payload=_serialize_payload(item),
+    )
+
+
+def _get_run_item_totals(run) -> dict:
+    status_totals = {
+        row['item_status']: row['count']
+        for row in run.items.values('item_status').annotate(count=models.Count('id'))
+    }
+    return {
+        'created': status_totals.get('created', 0),
+        'duplicate_count': status_totals.get('duplicate', 0),
+        'filtered_count': status_totals.get('filtered', 0),
+        'error_count': status_totals.get('error', 0),
+    }
+
+
+def _persist_crawled_items(source, items: list[dict], system_user, get_embedding, crawl_run=None) -> int:
     from datetime import timedelta
 
     from pgvector.django import CosineDistance
 
     from .models import AIConfig, Post
 
-    created = 0
+    result = {
+        'created': 0,
+        'duplicate_count': 0,
+        'filtered_count': 0,
+        'error_count': 0,
+    }
     is_news_category = bool(source.category and source.category.name.lower() == 'news')
     similarity_threshold = AIConfig.get_config().similarity_threshold if is_news_category else None
 
     for item in items:
         url = item.get('url', '').strip()
-        if not url or Post.objects.filter(source_url=url).exists():
+        normalized_url = normalize_source_url(url)
+        if not url:
+            result['filtered_count'] += 1
+            if crawl_run is not None:
+                _record_crawl_item(crawl_run, 'filtered', item, error_message='Missing source URL')
             continue
 
-        title = item.get('title') or '(제목 없음)'
+        if Post.objects.filter(
+            models.Q(normalized_source_url=normalized_url) | models.Q(source_url=url)
+        ).exists():
+            result['duplicate_count'] += 1
+            if crawl_run is not None:
+                _record_crawl_item(crawl_run, 'duplicate', item, error_message='Duplicate source URL')
+            continue
+
+        title = item.get('title') or '(??筌먯룄肄????⑤챶苡?'
         content = item.get('content', '')
         vector = get_embedding(f"{title}\n{content}")
 
-        new_post = Post.objects.create(
-            title=title,
-            content=content,
-            source_url=url,
-            site=source.name,
-            category=source.category,
-            author=system_user,
-            is_draft=False,
-            published_at=item.get('published_at'),
-            iocs=_extract_iocs(content),
-            embedding=vector if vector else None,
-        )
-        created += 1
+        try:
+            new_post = Post.objects.create(
+                title=title,
+                content=content,
+                source_url=url,
+                normalized_source_url=normalized_url,
+                site=source.name,
+                category=source.category,
+                author=system_user,
+                is_draft=False,
+                published_at=item.get('published_at'),
+                iocs=_extract_iocs(content),
+                embedding=vector if vector else None,
+            )
+            sync_post_cve_mentions(new_post)
+        except IntegrityError:
+            if Post.objects.filter(
+                models.Q(normalized_source_url=normalized_url) | models.Q(source_url=url)
+            ).exists():
+                result['duplicate_count'] += 1
+                if crawl_run is not None:
+                    _record_crawl_item(crawl_run, 'duplicate', item, error_message='Duplicate source URL')
+                continue
+            raise
+        result['created'] += 1
+        if crawl_run is not None:
+            _record_crawl_item(crawl_run, 'created', item, post=new_post)
 
         if not vector or not is_news_category or similarity_threshold is None:
             continue
@@ -525,9 +640,99 @@ def _persist_crawled_items(source, items: list[dict], system_user, get_embedding
             closest.save(update_fields=['parent_post'])
             Post.objects.filter(parent_post=closest.id).exclude(id=closest.id).exclude(id=new_post.id).update(parent_post=new_post)
 
-    return created
+    return result['created']
 
 
+def _persist_crawled_items_with_run(source, items: list[dict], system_user, get_embedding, crawl_run) -> dict:
+    from datetime import timedelta
+
+    from pgvector.django import CosineDistance
+
+    from .models import AIConfig, Post
+
+    result = {
+        'created': 0,
+        'duplicate_count': 0,
+        'filtered_count': 0,
+        'error_count': 0,
+    }
+    is_news_category = bool(source.category and source.category.name.lower() == 'news')
+    similarity_threshold = AIConfig.get_config().similarity_threshold if is_news_category else None
+
+    for item in items:
+        url = item.get('url', '').strip()
+        normalized_url = normalize_source_url(url)
+        if not url:
+            result['filtered_count'] += 1
+            _record_crawl_item(crawl_run, 'filtered', item, error_message='Missing source URL')
+            continue
+
+        try:
+            duplicate_detected = False
+            new_post = None
+            with transaction.atomic():
+                if Post.objects.filter(
+                    models.Q(normalized_source_url=normalized_url) | models.Q(source_url=url)
+                ).exists():
+                    duplicate_detected = True
+                else:
+                    title = item.get('title') or '(제목 없음)'
+                    content = item.get('content', '')
+                    vector = get_embedding(f"{title}\n{content}")
+
+                    new_post = Post.objects.create(
+                        title=title,
+                        content=content,
+                        source_url=url,
+                        normalized_source_url=normalized_url,
+                        site=source.name,
+                        category=source.category,
+                        author=system_user,
+                        is_draft=False,
+                        published_at=item.get('published_at'),
+                        iocs=_extract_iocs(content),
+                        embedding=vector if vector else None,
+                    )
+                    sync_post_cve_mentions(new_post)
+
+                    if vector and is_news_category and similarity_threshold is not None:
+                        seven_days_ago = timezone.now() - timedelta(days=7)
+                        closest = Post.objects.filter(
+                            created_at__gte=seven_days_ago,
+                            parent_post__isnull=True,
+                            embedding__isnull=False,
+                            category__name__iexact='news',
+                        ).exclude(id=new_post.id).annotate(
+                            distance=CosineDistance('embedding', vector)
+                        ).order_by('distance').first()
+
+                        if closest and getattr(closest, 'distance', 1.0) < similarity_threshold:
+                            closest.parent_post = new_post
+                            closest.save(update_fields=['parent_post'])
+                            Post.objects.filter(parent_post=closest.id).exclude(id=closest.id).exclude(id=new_post.id).update(parent_post=new_post)
+
+                    # created 기록은 Post 생성과 같은 transaction 안에서만 확정합니다.
+                    _record_crawl_item(crawl_run, 'created', item, post=new_post)
+
+            if duplicate_detected:
+                result['duplicate_count'] += 1
+                _record_crawl_item(crawl_run, 'duplicate', item, error_message='Duplicate source URL')
+            elif new_post is not None:
+                result['created'] += 1
+        except IntegrityError:
+            if Post.objects.filter(
+                models.Q(normalized_source_url=normalized_url) | models.Q(source_url=url)
+            ).exists():
+                result['duplicate_count'] += 1
+                _record_crawl_item(crawl_run, 'duplicate', item, error_message='Duplicate source URL')
+                continue
+            raise
+        except Exception as exc:
+            result['error_count'] += 1
+            logger.exception(f"[Crawler] 항목 처리 실패 ({source.name}): {exc}")
+            _record_crawl_item(crawl_run, 'error', item, error_message=str(exc))
+
+    return result
 def _send_telegram_notifications(source, created: int):
     if created <= 0 or not source.category or source.category.name not in ['Guide', 'Advice']:
         return
@@ -557,9 +762,9 @@ def _send_telegram_notifications(source, created: int):
         async def send_telegram_messages(posts, bot_token, chat_id):
             async with httpx.AsyncClient() as client:
                 for post in posts:
-                    message = f"보안 {post['category_name']} 수집\n\n"
+                    message = f"?怨뚮옖???눀?{post['category_name']} ???쒓낯??n\n"
                     message += f"[{post['title']}]({post['url']})\n\n"
-                    message += f"출처: {post['site']}\n"
+                    message += f"??⑥レ툔?? {post['site']}\n"
                     try:
                         await client.post(
                             f"https://api.telegram.org/bot{bot_token}/sendMessage",
@@ -572,23 +777,37 @@ def _send_telegram_notifications(source, created: int):
                             timeout=5.0,
                         )
                     except Exception as exc:
-                        logger.error(f"[Crawler] Telegram 전송 실패: {exc}")
+                        logger.error(f"[Crawler] Telegram ??ш끽維뽬땻?????됰꽡: {exc}")
 
         def run_telegram_async():
             asyncio.run(send_telegram_messages(posts_data, config.telegram_bot_token, config.telegram_chat_id))
 
         threading.Thread(target=run_telegram_async, daemon=True).start()
     except Exception as exc:
-        logger.error(f"[Crawler] Telegram 처리 오류: {exc}")
+        logger.error(f"[Crawler] Telegram 癲ル슪?ｇ몭??????곸씔: {exc}")
 
 
 def run_crawl(source, triggered_by: str = 'manual') -> dict:
     """
-    소스 하나를 실행하고 상태/로그를 갱신합니다.
-    반환: {'created', 'found', 'status', 'error', 'attempt_count', 'duration_seconds'}
+    ???獒???嚥▲굥猷??????덈틖???寃뗏????ㅺ컼???棺??짆??誘⒲걫???좊즲????筌뤾퍓???
+    ?袁⑸즵??? {'created', 'found', 'status', 'error', 'attempt_count', 'duration_seconds'}
     """
     from .embeddings import get_embedding
-    from .models import CrawlerLog
+    from .models import CrawlerLog, CrawlRun
+
+    try:
+        validate_crawler_request_config(source)
+    except CrawlerSecurityError as exc:
+        logger.warning(f"[Crawler] blocked source configuration: {getattr(source, 'url', '')} {exc.detail}")
+        return {
+            'created': 0,
+            'found': 0,
+            'status': 'error',
+            'error': 'Blocked crawler source configuration.',
+            'attempt_count': 0,
+            'duration_seconds': 0,
+            'run_id': None,
+        }
 
     locked = source.__class__.objects.filter(pk=source.pk, is_running=False).update(
         is_running=True,
@@ -599,14 +818,22 @@ def run_crawl(source, triggered_by: str = 'manual') -> dict:
             'created': 0,
             'found': 0,
             'status': 'running',
-            'error': '이미 실행 중인 크롤러입니다.',
+            'error': '???? ????덈틖 濚욌꼬?댄꺍????鸚???????덊렡.',
             'attempt_count': 0,
             'duration_seconds': 0,
+            'run_id': None,
         }
 
     source.refresh_from_db()
+    crawl_run = CrawlRun.objects.create(
+        source=source,
+        triggered_by=triggered_by,
+        status='running',
+        started_at=timezone.now(),
+    )
     started_at = time.monotonic()
-    max_attempts = 1 + max(0, int(source.max_retries or 0))
+    retry_enabled = triggered_by != 'scheduled'
+    max_attempts = 1 if not retry_enabled else 1 + max(0, int(source.max_retries or 0))
     found = 0
     created = 0
     attempt_count = 0
@@ -624,7 +851,8 @@ def run_crawl(source, triggered_by: str = 'manual') -> dict:
 
                 found = len(items)
                 system_user = _ensure_system_user()
-                created = _persist_crawled_items(source, items, system_user, get_embedding)
+                persist_result = _persist_crawled_items_with_run(source, items, system_user, get_embedding, crawl_run)
+                created = persist_result['created']
 
                 finished_at = timezone.now()
                 duration_seconds = max(0, int(time.monotonic() - started_at))
@@ -643,6 +871,29 @@ def run_crawl(source, triggered_by: str = 'manual') -> dict:
                     'consecutive_failures',
                     'is_running',
                     'last_run_started_at',
+                ])
+
+                crawl_run.status = last_status
+                crawl_run.finished_at = finished_at
+                crawl_run.attempt_count = attempt_count
+                crawl_run.articles_found = found
+                crawl_run.articles_created = created
+                crawl_run.duplicate_count = persist_result['duplicate_count']
+                crawl_run.filtered_count = persist_result['filtered_count']
+                crawl_run.error_count = persist_result['error_count']
+                crawl_run.duration_seconds = duration_seconds
+                crawl_run.error_message = ''
+                crawl_run.save(update_fields=[
+                    'status',
+                    'finished_at',
+                    'attempt_count',
+                    'articles_found',
+                    'articles_created',
+                    'duplicate_count',
+                    'filtered_count',
+                    'error_count',
+                    'duration_seconds',
+                    'error_message',
                 ])
 
                 CrawlerLog.objects.create(
@@ -664,13 +915,14 @@ def run_crawl(source, triggered_by: str = 'manual') -> dict:
                     'error': '',
                     'attempt_count': attempt_count,
                     'duration_seconds': duration_seconds,
+                    'run_id': crawl_run.id,
                 }
             except Exception as exc:
                 last_error = str(exc)
                 last_status = 'error'
-                logger.exception(f"[Crawler] 실행 실패 ({source.name}) attempt={attempt}/{max_attempts}: {exc}")
+                logger.exception(f"[Crawler] ????덈틖 ????됰꽡 ({source.name}) attempt={attempt}/{max_attempts}: {exc}")
 
-                if attempt < max_attempts:
+                if retry_enabled and attempt < max_attempts:
                     backoff_seconds = max(0, int(source.retry_backoff_minutes or 0)) * 60 * attempt
                     if backoff_seconds:
                         time.sleep(backoff_seconds)
@@ -701,7 +953,7 @@ def run_crawl(source, triggered_by: str = 'manual') -> dict:
 
         error_message = last_error
         if auto_disabled:
-            error_message = f"{last_error} (연속 실패 임계치 도달로 비활성화됨)"
+            error_message = f"{last_error} (???Β?ろ떗 ????됰꽡 ??ш낄猷?嚥▲렞????ш끽維?됰‥???????濚밸Ŧ遊???"
 
         CrawlerLog.objects.create(
             source=source,
@@ -714,6 +966,30 @@ def run_crawl(source, triggered_by: str = 'manual') -> dict:
             duration_seconds=duration_seconds,
         )
 
+        item_totals = _get_run_item_totals(crawl_run)
+        crawl_run.status = 'error'
+        crawl_run.finished_at = finished_at
+        crawl_run.attempt_count = attempt_count
+        crawl_run.articles_found = found or sum(item_totals.values())
+        crawl_run.articles_created = item_totals['created'] or created
+        crawl_run.duplicate_count = item_totals['duplicate_count']
+        crawl_run.filtered_count = item_totals['filtered_count']
+        crawl_run.error_count = item_totals['error_count']
+        crawl_run.error_message = error_message
+        crawl_run.duration_seconds = duration_seconds
+        crawl_run.save(update_fields=[
+            'status',
+            'finished_at',
+            'attempt_count',
+            'articles_found',
+            'articles_created',
+            'duplicate_count',
+            'filtered_count',
+            'error_count',
+            'error_message',
+            'duration_seconds',
+        ])
+
         return {
             'created': created,
             'found': found,
@@ -721,13 +997,14 @@ def run_crawl(source, triggered_by: str = 'manual') -> dict:
             'error': error_message,
             'attempt_count': attempt_count,
             'duration_seconds': duration_seconds,
+            'run_id': crawl_run.id,
         }
     finally:
         source.__class__.objects.filter(pk=source.pk, is_running=True).update(is_running=False)
 
 
 class _SourceProxy:
-    """DB 없이 dict 기반 설정을 source 객체처럼 다루기 위한 프록시입니다."""
+    """DB ???⑤챶??dict ??れ삀??뫢????源놁젳??source ??좊즵??꼯???삳읁?嚥?諭?????노젵????ш낄援η뵳???ш끽維곩ㅇ??筌믨퀡?????덊렡."""
 
     def __init__(self, data: dict):
         self.url = data.get('url', '')
@@ -747,8 +1024,8 @@ class _SourceProxy:
 
 def preview_crawl(data: dict, limit: int = 10) -> dict:
     """
-    DB 저장 없이 현재 설정으로 크롤링 결과를 미리 봅니다.
-    반환: {'items': [...], 'status': str, 'error': str}
+    DB ???????⑤챶????ш끽維?????源놁젳???⑥????鸚룸슚異??濡ろ뜏???醫듽걫?雅?퍔瑗띰㎖?????껎꼤???
+    ?袁⑸즵??? {'items': [...], 'status': str, 'error': str}
     """
     import html as html_lib
     import re
