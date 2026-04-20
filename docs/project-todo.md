@@ -357,6 +357,12 @@ P1 시작 조건:
 - 2026-04-20: `P2-5 PostViewSet 분해 1차 구현` 완료 (`backend/api/post_views.py`로 ViewSet 분리, backend check/test 통과)
 - 2026-04-20: `P2-6 Post helper 분해 1차 구현` 완료 (`post_helpers.py`로 summary/workflow helper 분리, backend check/test 통과)
 - 2026-04-20: `P2-7 AI / crawler / analytics view 분리 1차 구현` 완료 (`view_helpers.py`, `ai_views.py`, `crawler_views.py`, `analytics_views.py` 추가, backend check/test 통과)
+- 2026-04-20: `P3-1 Playwright 기반 핵심 E2E 자동화 구현` 완료 (seed command, Playwright config, 핵심 4개 흐름 E2E 추가, 6 passed)
+- 2026-04-20: `P3-2 backend/api/crawler.py 내부 분해` 완료 (fetch/persistence/preview/notification 분리, backend check/test 통과)
+- 2026-04-20: `P3-3 운영 환경 설정 하드닝` 완료 (운영 가이드 및 production env example 추가)
+- 2026-04-20: `P3-4 자동화 테스트 실행 스크립트/CI 기준선` 완료 (`run_ci_checks.bat` 추가)
+- 2026-04-20: `P3-5 프론트 대형 화면 추가 분해` 완료 (`admin/posts`, `HomeFeed`, `profile` UI 블록 분리, lint/build/e2e 통과)
+- 2026-04-20: `P3-6 인증 구조 고도화 검토` 완료 (localStorage vs cookie 비교 및 영향 범위 문서화)
 
 ## P3. 후속 백로그
 
@@ -386,9 +392,9 @@ P1 시작 조건:
 - 크롤러 운영/테스트 회귀 위험이 큰 편이라 E2E 기준선 다음이 적절함
 
 ### P3-3. 운영 환경 설정 하드닝
-- [ ] 운영용 설정 체크리스트를 실제 값 기준으로 구체화
-- [ ] `DEBUG`, `SECRET_KEY`, `CORS`, `ALLOWED_HOSTS` 운영 기준 강화
-- [ ] 프론트 `NEXT_PUBLIC_API_URL` 운영 배포 문서 정리
+- [x] 운영용 설정 체크리스트를 실제 값 기준으로 구체화
+- [x] `DEBUG`, `SECRET_KEY`, `CORS`, `ALLOWED_HOSTS` 운영 기준 강화
+- [x] 프론트 `NEXT_PUBLIC_API_URL` 운영 배포 문서 정리
 
 우선순위:
 - `높음`
@@ -397,25 +403,25 @@ P1 시작 조건:
 - 문서는 작성됐지만 운영 실값 기준 하드닝은 아직 실행되지 않음
 
 ### P3-4. 자동화 테스트 실행 스크립트/CI 기준선
-- [ ] Playwright 실행 스크립트 추가
-- [ ] 백엔드 테스트 + 프론트 lint/build + E2E 실행 순서 정의
-- [ ] 로컬/CI 공통 검증 명령 정리
+- [x] Playwright 실행 스크립트 추가
+- [x] 백엔드 테스트 + 프론트 lint/build + E2E 실행 순서 정의
+- [x] 로컬/CI 공통 검증 명령 정리
 
 우선순위:
 - `중상`
 
 ### P3-5. 프론트 대형 화면 추가 분해
-- [ ] `admin/posts/page.tsx` 분리
-- [ ] `HomeFeed.tsx` 분리
-- [ ] `profile/page.tsx` 분리
+- [x] `admin/posts/page.tsx` 분리
+- [x] `HomeFeed.tsx` 분리
+- [x] `profile/page.tsx` 분리
 
 우선순위:
 - `중간`
 
 ### P3-6. 인증 구조 고도화 검토
-- [ ] JWT `localStorage` 유지 vs cookie 전환 비교
-- [ ] httpOnly cookie 전환 시 영향 범위 문서화
-- [ ] 세션 모델 변경 여부 결정
+- [x] JWT `localStorage` 유지 vs cookie 전환 비교
+- [x] httpOnly cookie 전환 시 영향 범위 문서화
+- [x] 세션 모델 변경 여부 결정
 
 우선순위:
 - `중간`
@@ -423,8 +429,10 @@ P1 시작 조건:
 ## 다음 액션
 - [x] `P3-1 Playwright 기반 핵심 E2E 자동화 구현` 완료
 - [x] `P3-2 backend/api/crawler.py 내부 분해` 완료
-- [ ] `P3-4 자동화 테스트 실행 스크립트/CI 기준선` 정리
-- [ ] 필요 시 crawler 운영 플로우 E2E 추가
+- [x] `P3-3 운영 환경 설정 하드닝` 완료
+- [x] `P3-4 자동화 테스트 실행 스크립트/CI 기준선` 완료
+- [x] `P3-5 프론트 대형 화면 추가 분해` 완료
+- [x] `P3-6 인증 구조 고도화 검토` 완료
 - [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료

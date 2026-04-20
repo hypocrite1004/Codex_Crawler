@@ -11,6 +11,16 @@
 - [ ] `npm run lint`
 - [ ] `npm run build`
 
+## 1-1. 운영 설정 체크
+
+- [ ] `DEBUG=False`
+- [ ] `SECRET_KEY`가 `change-me` 아님
+- [ ] `DB_PASSWORD`가 기본값 아님
+- [ ] `ALLOWED_HOSTS`가 운영 도메인만 포함
+- [ ] `CORS_ALLOW_ALL_ORIGINS=False`
+- [ ] `CORS_ALLOWED_ORIGINS`가 운영 프론트 도메인만 포함
+- [ ] `NEXT_PUBLIC_API_URL`가 운영 API 주소로 설정
+
 ## 2. 공개/비공개 정책 체크
 
 - [ ] guest가 공개 게시글 상세 접근 가능
@@ -86,3 +96,4 @@
 - [local-development.md](/C:/project/Codex/Crawler/docs/local-development.md)
 - [p1-9-backend-test-environment-baseline.md](/C:/project/Codex/Crawler/docs/p1-9-backend-test-environment-baseline.md)
 - [p1-10-core-qa-scenarios.md](/C:/project/Codex/Crawler/docs/p1-10-core-qa-scenarios.md)
+- [p3-3-production-hardening-guide.md](/C:/project/Codex/Crawler/docs/p3-3-production-hardening-guide.md)
