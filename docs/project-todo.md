@@ -304,6 +304,14 @@ P1 시작 조건:
 - [x] 테스트 mock 경로 호환성 유지
 - [x] `manage.py check`, `api.tests --keepdb` 통과
 
+### P2-7. AI / crawler / analytics view 분리 1차 구현
+- [x] 공통 권한/helper를 `backend/api/view_helpers.py`로 분리
+- [x] AI view를 `backend/api/ai_views.py`로 분리
+- [x] crawler view를 `backend/api/crawler_views.py`로 분리
+- [x] CVE / dashboard view를 `backend/api/analytics_views.py`로 분리
+- [x] `views.py`를 인증/유저/카테고리/댓글 중심으로 정리
+- [x] `manage.py check`, `api.tests --keepdb` 통과
+
 관련 위치:
 - [frontend/README.md](/C:/project/Codex/crawler/frontend/README.md)
 
@@ -324,8 +332,8 @@ P1 시작 조건:
 - [x] `P2-4 프론트 API 클라이언트 분해 1차 구현` 완료
 - [x] `P2-5 PostViewSet 분해 1차 구현` 완료
 - [x] `P2-6 Post helper 분해 1차 구현` 완료
-- [ ] 다음 라운드에서 crawler/CVE/dashboard view 분리 또는 Playwright 자동화 테스트 구현 착수
-- [ ] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
+- [x] `P2-7 AI / crawler / analytics view 분리 1차 구현` 완료
+- [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 
 ## 작업 로그
 - 2026-03-27: 초기 분석 결과를 바탕으로 Todo 문서 생성
@@ -348,6 +356,7 @@ P1 시작 조건:
 - 2026-04-20: `P2-4 프론트 API 클라이언트 분해 1차 구현` 완료 (`api.ts`를 기능별 모듈과 배럴 구조로 분리, lint/build 통과)
 - 2026-04-20: `P2-5 PostViewSet 분해 1차 구현` 완료 (`backend/api/post_views.py`로 ViewSet 분리, backend check/test 통과)
 - 2026-04-20: `P2-6 Post helper 분해 1차 구현` 완료 (`post_helpers.py`로 summary/workflow helper 분리, backend check/test 통과)
+- 2026-04-20: `P2-7 AI / crawler / analytics view 분리 1차 구현` 완료 (`view_helpers.py`, `ai_views.py`, `crawler_views.py`, `analytics_views.py` 추가, backend check/test 통과)
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료
 - [x] 대시보드 접근을 `staff/admin`으로 제한
@@ -357,10 +366,10 @@ P1 시작 조건:
 - [x] 게시글 삭제를 `admin` 전용으로 제한
 - [x] 크롤러 preview/manual crawl을 `admin` 전용으로 제한
 - [x] 공개 CVE 응답에서 운영 필드(`notes`, `is_tracked`, `legacy_mention_count`)를 숨김
-- [-] P0-4 정책 반영 검증 진행 중
+- [x] P0-4 정책 반영 검증 완료
 - [x] `npm run lint`
 - [x] `npm run build`
 - [x] `python -m py_compile backend/api/views.py backend/api/serializers.py backend/api/tests.py`
 - [!] `python manage.py check`
   - 차단 사유: `pgvector` 모듈 미설치
-- [ ] 다음 작업: 로컬 백엔드 실행 환경 복구 후 P0-4 수동 QA 체크리스트 수행
+- [x] 다음 작업: 로컬 백엔드 실행 환경 복구 후 P0-4 수동 QA 체크리스트 수행
