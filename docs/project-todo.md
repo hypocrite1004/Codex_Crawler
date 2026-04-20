@@ -292,6 +292,12 @@ P1 시작 조건:
 - [x] 기존 import 경로 `@/lib/api` 유지
 - [x] `npm run lint`, `npm run build` 통과
 
+### P2-5. PostViewSet 분해 1차 구현
+- [x] `PostViewSet`을 `backend/api/post_views.py`로 분리
+- [x] 기존 URL/라우터 유지
+- [x] summary mock 경로 호환성 유지
+- [x] `manage.py check`, `api.tests --keepdb` 통과
+
 관련 위치:
 - [frontend/README.md](/C:/project/Codex/crawler/frontend/README.md)
 
@@ -310,7 +316,8 @@ P1 시작 조건:
 - [x] `P2-3 문서 정비` 완료
 - [x] 실제 문서 작성 실행
 - [x] `P2-4 프론트 API 클라이언트 분해 1차 구현` 완료
-- [ ] 다음 라운드에서 `backend/api/views.py` 분리 또는 Playwright 자동화 테스트 구현 착수
+- [x] `P2-5 PostViewSet 분해 1차 구현` 완료
+- [ ] 다음 라운드에서 `views.py` helper/service 분리 또는 Playwright 자동화 테스트 구현 착수
 - [ ] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 
 ## 작업 로그
@@ -332,6 +339,7 @@ P1 시작 조건:
 - 2026-04-20: `P2-3 문서 정비` 완료 (README/로컬 실행/운영 체크 문서의 작성 우선순위와 범위 정리)
 - 2026-04-20: 실제 문서 작성 완료 (`docs/local-development.md`, `frontend/README.md`, `docs/operations-checklist.md`)
 - 2026-04-20: `P2-4 프론트 API 클라이언트 분해 1차 구현` 완료 (`api.ts`를 기능별 모듈과 배럴 구조로 분리, lint/build 통과)
+- 2026-04-20: `P2-5 PostViewSet 분해 1차 구현` 완료 (`backend/api/post_views.py`로 ViewSet 분리, backend check/test 통과)
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료
 - [x] 대시보드 접근을 `staff/admin`으로 제한
