@@ -10,14 +10,14 @@ from rest_framework.response import Response
 
 from .cve_sync import sync_post_cve_mentions
 from .models import Comment, Post, PostCveMention
+from .post_helpers import apply_post_status as _apply_post_status
+from .post_helpers import normalize_summary_payload
 from .serializers import AdminPostListSerializer, CommentSerializer, PostListSerializer, PostSerializer
 from . import views as legacy_views
 from .views import (
     IsStaffUser,
-    _apply_post_status,
     is_admin_user,
     is_staff_user,
-    normalize_summary_payload,
     sanitize_rich_text,
 )
 
