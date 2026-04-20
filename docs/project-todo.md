@@ -357,6 +357,73 @@ P1 시작 조건:
 - 2026-04-20: `P2-5 PostViewSet 분해 1차 구현` 완료 (`backend/api/post_views.py`로 ViewSet 분리, backend check/test 통과)
 - 2026-04-20: `P2-6 Post helper 분해 1차 구현` 완료 (`post_helpers.py`로 summary/workflow helper 분리, backend check/test 통과)
 - 2026-04-20: `P2-7 AI / crawler / analytics view 분리 1차 구현` 완료 (`view_helpers.py`, `ai_views.py`, `crawler_views.py`, `analytics_views.py` 추가, backend check/test 통과)
+
+## P3. 후속 백로그
+
+### P3-1. Playwright 기반 핵심 E2E 자동화 구현
+- [ ] 관리자 글 관리 플로우 E2E 작성
+- [ ] 게시글 상세 / 댓글 / 요약 플로우 E2E 작성
+- [ ] 로그인 / 프로필 플로우 E2E 작성
+- [ ] 대시보드 / CVE 흐름 E2E 작성
+
+우선순위:
+- `최상`
+
+이유:
+- 현재 정책/권한/운영 흐름이 많이 정리되어 있어 자동화 회귀 방지 효과가 큼
+- 이미 문서화된 [p1-10-core-qa-scenarios.md](/C:/project/Codex/Crawler/docs/p1-10-core-qa-scenarios.md), [p2-2-frontend-automation-test-scope.md](/C:/project/Codex/Crawler/docs/p2-2-frontend-automation-test-scope.md)를 바로 구현으로 옮길 수 있음
+
+### P3-2. `backend/api/crawler.py` 내부 분해
+- [ ] fetch / parsing / persistence / runtime / preview 경계로 분리
+- [ ] 중복된 persistence 경로 정리
+- [ ] notification / url utils 분리
+
+우선순위:
+- `높음`
+
+이유:
+- 현재 남은 가장 큰 백엔드 파일
+- 크롤러 운영/테스트 회귀 위험이 큰 편이라 E2E 기준선 다음이 적절함
+
+### P3-3. 운영 환경 설정 하드닝
+- [ ] 운영용 설정 체크리스트를 실제 값 기준으로 구체화
+- [ ] `DEBUG`, `SECRET_KEY`, `CORS`, `ALLOWED_HOSTS` 운영 기준 강화
+- [ ] 프론트 `NEXT_PUBLIC_API_URL` 운영 배포 문서 정리
+
+우선순위:
+- `높음`
+
+이유:
+- 문서는 작성됐지만 운영 실값 기준 하드닝은 아직 실행되지 않음
+
+### P3-4. 자동화 테스트 실행 스크립트/CI 기준선
+- [ ] Playwright 실행 스크립트 추가
+- [ ] 백엔드 테스트 + 프론트 lint/build + E2E 실행 순서 정의
+- [ ] 로컬/CI 공통 검증 명령 정리
+
+우선순위:
+- `중상`
+
+### P3-5. 프론트 대형 화면 추가 분해
+- [ ] `admin/posts/page.tsx` 분리
+- [ ] `HomeFeed.tsx` 분리
+- [ ] `profile/page.tsx` 분리
+
+우선순위:
+- `중간`
+
+### P3-6. 인증 구조 고도화 검토
+- [ ] JWT `localStorage` 유지 vs cookie 전환 비교
+- [ ] httpOnly cookie 전환 시 영향 범위 문서화
+- [ ] 세션 모델 변경 여부 결정
+
+우선순위:
+- `중간`
+
+## 다음 액션
+- [ ] `P3-1 Playwright 기반 핵심 E2E 자동화 구현` 착수
+- [ ] 필요 시 `P3-2 backend/api/crawler.py 내부 분해` 병행 검토
+- [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료
 - [x] 대시보드 접근을 `staff/admin`으로 제한
