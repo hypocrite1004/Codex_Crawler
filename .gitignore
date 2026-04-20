@@ -12,3 +12,4 @@ logs/
 db/*.gz
 db/*.csv
 db/*.txt
+output/playwright/
