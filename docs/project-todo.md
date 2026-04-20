@@ -9,6 +9,8 @@
 ## 운영 규칙
 - 새 작업을 시작하기 전에 관련 Task 상태를 먼저 갱신합니다.
 - 작업 완료 후에는 결과와 남은 이슈를 같은 문서에 반영합니다.
+- 큰 항목이 완료되면 문서화와 커밋을 함께 진행합니다.
+- 큰 항목 완료 후에는 현재 진행 현황을 사용자에게 보고합니다.
 - PM 역할은 기본적으로 `product-manager` 에이전트가 담당합니다.
 - 문서화 역할은 기본적으로 `documentation-engineer` 에이전트가 담당합니다.
 - 새 안건은 `product-manager`가 먼저 정리하고, 필요한 전문 에이전트 의견을 수집한 뒤 종합 보고합니다.
@@ -69,9 +71,7 @@
 - [x] 백엔드 정적 설정 점검: `manage.py check` 통과
 - [x] 프론트 정적 점검: `npm run lint` 통과
 - [x] 프론트 빌드 점검: `npm run build` 통과
-- [!] 백엔드 테스트 실행
-  - 상태: 차단
-  - 확인 내용: PostgreSQL `127.0.0.1:5433` 연결 실패로 테스트 DB 생성 불가
+- [x] 백엔드 테스트 실행: `python backend/manage.py test api.tests --keepdb` 통과
 
 ## P0. 정책/권한 기준선 확정 및 반영
 
@@ -128,17 +128,17 @@
 - 프론트와 백엔드가 같은 공개 정책을 따르도록 기준이 정리되어 있어야 함
 
 ### P0-3. 정책 반영 구현
-- [ ] 대시보드를 `staff/admin` 전용으로 제한
-- [ ] `published` 게시글 상세를 비로그인 공개 정책에 맞게 프론트/백엔드 정렬
-- [ ] 비공개 게시글 URL 직접 접근 시 guest/user에게 `404` 또는 동등 수준으로 숨김
-- [ ] 댓글 전역 조회 API 축소
-- [ ] 댓글 조회 범위를 `published` 게시글 하위로 제한
-- [ ] `admin/posts`는 `staff/admin`, `admin/crawler`와 `admin/ai`는 `admin` 전용으로 분리
-- [ ] 게시글 삭제를 `admin` 전용으로 제한
-- [ ] 크롤러 `preview/manual crawl`을 `admin` 전용으로 제한
-- [ ] CVE 운영 필드(`notes`, `is_tracked`, `legacy_mention_count`) 비공개 처리
-- [ ] public author profile은 미구현 상태로 유지
-- [ ] 일반 사용자용 대시보드는 미구현 상태로 유지
+- [x] 대시보드를 `staff/admin` 전용으로 제한
+- [x] `published` 게시글 상세를 비로그인 공개 정책에 맞게 프론트/백엔드 정렬
+- [x] 비공개 게시글 URL 직접 접근 시 guest/user에게 `404` 또는 동등 수준으로 숨김
+- [x] 댓글 전역 조회 API 축소
+- [x] 댓글 조회 범위를 `published` 게시글 하위로 제한
+- [x] `admin/posts`는 `staff/admin`, `admin/crawler`와 `admin/ai`는 `admin` 전용으로 분리
+- [x] 게시글 삭제를 `admin` 전용으로 제한
+- [x] 크롤러 `preview/manual crawl`을 `admin` 전용으로 제한
+- [x] CVE 운영 필드(`notes`, `is_tracked`, `legacy_mention_count`) 비공개 처리
+- [x] public author profile은 미구현 상태로 유지
+- [x] 일반 사용자용 대시보드는 미구현 상태로 유지
 
 관련 문서:
 - [p0-1-access-policy-draft.md](/C:/project/Codex/crawler/docs/p0-1-access-policy-draft.md)
@@ -149,16 +149,16 @@
 - 주요 공개/비공개 경계가 코드 기준으로 일치해야 함
 
 ### P0-4. 정책 반영 검증
-- [ ] 비로그인 사용자의 `published` 게시글 목록/상세 접근 검증
-- [ ] 비공개 게시글의 URL 직접 접근 차단 검증
-- [ ] 대시보드의 `staff/admin` 제한 검증
-- [ ] 댓글 공개 범위와 전역 API 축소 검증
-- [ ] `admin/posts` / `admin/crawler` / `admin/ai` 권한 분리 검증
-- [ ] CVE 공개 필드와 운영 필드 분리 검증
-- [ ] 최소 회귀 테스트 또는 수동 QA 체크리스트 반영
-- [!] 백엔드 테스트 실행 환경 복구
-  - 상태: 차단
-  - 확인 내용: PostgreSQL `127.0.0.1:5433` 연결 실패로 테스트 DB 생성 불가
+- [x] 비로그인 사용자의 `published` 게시글 목록/상세 접근 검증
+- [x] 비공개 게시글의 URL 직접 접근 차단 검증
+- [x] 대시보드의 `staff/admin` 제한 검증
+- [x] 댓글 공개 범위와 전역 API 축소 검증
+- [x] `admin/posts` / `admin/crawler` / `admin/ai` 권한 분리 검증
+- [x] CVE 공개 필드와 운영 필드 분리 검증
+- [x] 최소 회귀 테스트 또는 수동 QA 체크리스트 반영
+- [x] 백엔드 테스트 실행 환경 복구
+  - 상태: 해결
+  - 확인 내용: 로컬 PostgreSQL 실행 및 `python backend/manage.py test api.tests --keepdb` 통과
 
 완료 기준:
 - 정책 반영 후 핵심 흐름 검증 결과가 남아 있어야 함
@@ -172,44 +172,44 @@ P1 시작 조건:
 - P0 종료 판단이 문서에 기록됨
 
 ### P1-1. 대시보드 데이터 노출 범위 정리
-- [ ] 일반 로그인 사용자가 대시보드에 접근 가능한지 정책 확정
-- [ ] 대시보드 집계 대상이 `전체 글`인지 `published + 본인 글`인지 결정
-- [ ] 최근 글/크롤러 통계/CVE 통계 노출 범위 정의
+- [x] 일반 로그인 사용자가 대시보드에 접근 가능한지 정책 확정
+- [x] 대시보드 집계 대상이 `전체 글`인지 `published + 본인 글`인지 결정
+- [x] 최근 글/크롤러 통계/CVE 통계 노출 범위 정의
 
 관련 위치:
 - [backend/api/views.py](/C:/project/Codex/crawler/backend/api/views.py#L1051)
 - [frontend/src/components/Navbar.tsx](/C:/project/Codex/crawler/frontend/src/components/Navbar.tsx#L66)
 
 ### P1-2. 공유 토글 권한 정리
-- [ ] `toggle_share`를 작성자 또는 관리자만 수행 가능하도록 정책 확정
-- [ ] 프론트에서 공유 버튼 노출 대상을 정의
-- [ ] 관련 테스트 필요 여부 정리
+- [x] `toggle_share`를 작성자 또는 관리자만 수행 가능하도록 정책 확정
+- [x] 프론트에서 공유 버튼 노출 대상을 정의
+- [x] 관련 테스트 필요 여부 정리
 
 관련 위치:
 - [backend/api/views.py](/C:/project/Codex/crawler/backend/api/views.py#L650)
 
 ### P1-3. 댓글 API 노출 범위 정리
-- [ ] `/api/comments/` 직접 노출 유지 여부 결정
-- [ ] 댓글 queryset을 게시글 공개 정책과 연동할지 결정
-- [ ] 댓글 조회를 게시글 상세 하위 경로 중심으로 제한할지 검토
+- [x] `/api/comments/` 직접 노출 유지 여부 결정
+- [x] 댓글 queryset을 게시글 공개 정책과 연동할지 결정
+- [x] 댓글 조회를 게시글 상세 하위 경로 중심으로 제한할지 검토
 
 관련 위치:
 - [backend/api/views.py](/C:/project/Codex/crawler/backend/api/views.py#L270)
 - [backend/api/serializers.py](/C:/project/Codex/crawler/backend/api/serializers.py#L50)
 
 ### P1-4. 관리자 크롤러 보안 리스크 정리
-- [ ] preview/manual crawl의 허용 범위 문서화
-- [ ] 내부망/loopback/private IP 차단 정책 검토
-- [ ] 허용 헤더/허용 도메인 정책 검토
+- [x] preview/manual crawl의 허용 범위 문서화
+- [x] 내부망/loopback/private IP 차단 정책 검토
+- [x] 허용 헤더/허용 도메인 정책 검토
 
 관련 위치:
 - [backend/api/views.py](/C:/project/Codex/crawler/backend/api/views.py#L909)
 - [backend/api/crawler.py](/C:/project/Codex/crawler/backend/api/crawler.py#L789)
 
 ### P1-5. 스케줄러 장애 격리 방안 정리
-- [ ] 순차 실행 구조의 병목 여부 확인
-- [ ] 재시도 `sleep` 구조 개선 필요성 판단
-- [ ] 한 소스 실패가 전체 스케줄에 미치는 영향 정리
+- [x] 순차 실행 구조의 병목 여부 확인
+- [x] 재시도 `sleep` 구조 개선 필요성 판단
+- [x] 한 소스 실패가 전체 스케줄에 미치는 영향 정리
 
 관련 위치:
 - [backend/api/management/commands/run_crawler_scheduler.py](/C:/project/Codex/crawler/backend/api/management/commands/run_crawler_scheduler.py#L54)
@@ -218,9 +218,9 @@ P1 시작 조건:
 ## P1. API/구조 기준 정리
 
 ### P1-6. `/api/posts/` 응답 계약 표준화
-- [ ] 배열 응답과 paginated object 응답 혼용 정책 정리
-- [ ] 프론트 표준 호출 방식 정의
-- [ ] 새 화면 추가 시 따라야 할 API 규칙 정리
+- [x] 배열 응답과 paginated object 응답 혼용 정책 정리
+- [x] 프론트 표준 호출 방식 정의
+- [x] 새 화면 추가 시 따라야 할 API 규칙 정리
 
 관련 위치:
 - [backend/api/views.py](/C:/project/Codex/crawler/backend/api/views.py#L432)
@@ -290,8 +290,10 @@ P1 시작 조건:
 ## 다음 액션
 - [x] `P0-1 권한 정책표 작성` 확정
 - [x] `P0-2 공개/비공개 정책 확정` 확정
-- [ ] `P0-3 정책 반영 구현` 시작
-- [ ] `P0-4 정책 반영 검증` 준비
+- [x] `P0-3 정책 반영 구현` 완료
+- [x] `P0-4 정책 반영 검증` 완료
+- [x] `P1-1` ~ `P1-6` 완료
+- [ ] `P1-7 프론트 인증/토큰 관리 정책 정리` 시작
 - [ ] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 
 ## 작업 로그
@@ -302,6 +304,7 @@ P1 시작 조건:
 - 2026-03-27: `product-manager` 기준으로 P0-2 공개/비공개 정책 초안 작성 시작
 - 2026-03-27: P0-2 승인 항목 최종 확정 (댓글 공개 범위 제한, 댓글 전역 API 축소, 운영 화면 분리, public author profile 보류, 일반 사용자 대시보드 보류, 비공개 게시글 404 수준 숨김)
 - 2026-03-27: P0를 `정책 / 구현 / 검증` 구조로 재정리하고, P0 완료 후에만 P1로 넘어가도록 기준선 갱신
+- 2026-04-20: 실제 완료 상태 기준으로 Todo 문서를 재정렬하고, 이후 작업은 이 문서를 기준으로 대항목 완료 시 문서화/커밋/진행 보고 흐름으로 운영하기로 확정
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료
 - [x] 대시보드 접근을 `staff/admin`으로 제한
