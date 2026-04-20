@@ -374,9 +374,9 @@ P1 시작 조건:
 - 이미 문서화된 [p1-10-core-qa-scenarios.md](/C:/project/Codex/Crawler/docs/p1-10-core-qa-scenarios.md), [p2-2-frontend-automation-test-scope.md](/C:/project/Codex/Crawler/docs/p2-2-frontend-automation-test-scope.md)를 바로 구현으로 옮길 수 있음
 
 ### P3-2. `backend/api/crawler.py` 내부 분해
-- [ ] fetch / parsing / persistence / runtime / preview 경계로 분리
-- [ ] 중복된 persistence 경로 정리
-- [ ] notification / url utils 분리
+- [x] fetch / parsing / persistence / runtime / preview 경계로 분리
+- [x] 중복된 persistence 경로 정리
+- [x] notification / url utils 분리
 
 우선순위:
 - `높음`
@@ -422,7 +422,8 @@ P1 시작 조건:
 
 ## 다음 액션
 - [x] `P3-1 Playwright 기반 핵심 E2E 자동화 구현` 완료
-- [ ] `P3-2 backend/api/crawler.py 내부 분해` 착수
+- [x] `P3-2 backend/api/crawler.py 내부 분해` 완료
+- [ ] `P3-4 자동화 테스트 실행 스크립트/CI 기준선` 정리
 - [ ] 필요 시 crawler 운영 플로우 E2E 추가
 - [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
