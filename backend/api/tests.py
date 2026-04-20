@@ -931,6 +931,17 @@ class AIConfigAndSummarySecurityTests(APITestCase):
         self.assertTrue(self.post.is_summarized)
         self.assertEqual(json.loads(self.post.summary)['title'], 'AI Title')
 
+    @patch('api.views.generate_summary_payload', return_value={'title': 'Staff Title', 'summary': 'Staff Summary'})
+    def test_staff_can_generate_summary_for_another_users_post(self, _mock_generate_summary):
+        self.client.force_authenticate(user=self.staff)
+
+        response = self.client.post(f'/api/posts/{self.post.id}/summarize/')
+
+        self.assertEqual(response.status_code, 200)
+        self.post.refresh_from_db()
+        self.assertTrue(self.post.is_summarized)
+        self.assertEqual(json.loads(self.post.summary)['title'], 'Staff Title')
+
 
 class CveFeatureTests(APITestCase):
     def setUp(self):

@@ -233,6 +233,7 @@ export default function PostSummary({
     }, []);
 
     const isAuthor = currentUser?.username === authorUsername;
+    const canManageSummary = Boolean(currentUser && (isAuthor || currentUser.is_staff));
     const parsedSummary: SummaryJSON | null = (() => {
         if (!summary) {
             return null;
@@ -362,12 +363,12 @@ export default function PostSummary({
                             {copied ? '복사됨' : '복사'}
                         </button>
                     )}
-                    {!summary && isAuthor && (
+                    {!summary && canManageSummary && (
                         <button onClick={handleSummarize} disabled={loading} className="btn btn-outline" style={{ padding: '6px 16px', fontSize: '0.85rem', borderColor: 'var(--accent-secondary)', color: 'var(--accent-secondary)' }}>
                             {loading ? '분석 중...' : '요약 생성'}
                         </button>
                     )}
-                    {summary && isAuthor && !isEditing && (
+                    {summary && canManageSummary && !isEditing && (
                         <>
                             <button onClick={() => { setIsEditing(true); setEditContent(summary); }} className="btn btn-outline" style={{ padding: '4px 12px', fontSize: '0.8rem' }}>
                                 편집

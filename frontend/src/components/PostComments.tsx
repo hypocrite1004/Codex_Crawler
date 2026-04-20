@@ -136,7 +136,7 @@ export default function PostComments({ postId, initialComments }: { postId: numb
                                 </div>
                             </div>
 
-                            {currentUser?.username === comment.author?.username && !editingCommentId && (
+                            {(currentUser && (currentUser.username === comment.author?.username || currentUser.is_staff) && !editingCommentId) && (
                                 <div style={{ display: 'flex', gap: '8px' }}>
                                     <button onClick={() => handleEditClick(comment)} className="btn btn-outline" style={{ padding: '4px 10px', fontSize: '0.8rem' }}>Edit</button>
                                     <button onClick={() => handleDeleteComment(comment.id)} className="btn btn-outline" style={{ padding: '4px 10px', fontSize: '0.8rem', color: '#ef4444', borderColor: '#ef4444' }}>Delete</button>
