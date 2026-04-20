@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { fetchProfile } from '@/lib/api';
+import { fetchProfile, hasClientSession } from '@/lib/api';
 
 export default function ClientPostGuard({ children }: { children: React.ReactNode }) {
     const router = useRouter();
@@ -10,8 +10,7 @@ export default function ClientPostGuard({ children }: { children: React.ReactNod
 
     useEffect(() => {
         const checkAuth = async () => {
-            const token = localStorage.getItem('access_token');
-            if (!token) {
+            if (!hasClientSession()) {
                 router.push('/login');
                 return;
             }

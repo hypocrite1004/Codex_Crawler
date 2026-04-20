@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-import { getErrorMessage, login } from '@/lib/api';
+import { getErrorMessage, login, storeAuthTokens } from '@/lib/api';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -27,9 +27,7 @@ export default function LoginPage() {
         event.preventDefault();
         try {
             const data = await login(formData);
-            localStorage.setItem('access_token', data.access);
-            localStorage.setItem('refresh_token', data.refresh);
-            window.dispatchEvent(new Event('auth-change'));
+            storeAuthTokens(data);
             router.push('/');
             router.refresh();
         } catch (loginError: unknown) {

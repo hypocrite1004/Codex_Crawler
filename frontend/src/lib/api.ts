@@ -1,4 +1,12 @@
-export const API_URL = "http://127.0.0.1:8000/api";
+const DEFAULT_API_URL = 'http://127.0.0.1:8000/api';
+const ACCESS_TOKEN_KEY = 'access_token';
+const REFRESH_TOKEN_KEY = 'refresh_token';
+
+function normalizeApiUrl(value: string): string {
+    return value.replace(/\/+$/, '');
+}
+
+export const API_URL = normalizeApiUrl(process.env.NEXT_PUBLIC_API_URL?.trim() || DEFAULT_API_URL);
 
 export interface AuthTokens {
     access: string;
@@ -47,11 +55,33 @@ export function getErrorMessage(error: unknown, fallback = "Unexpected error"): 
     return error instanceof Error ? error.message : fallback;
 }
 
+export function getStoredAccessToken(): string | null {
+    return typeof window !== 'undefined' ? localStorage.getItem(ACCESS_TOKEN_KEY) : null;
+}
+
+export function getStoredRefreshToken(): string | null {
+    return typeof window !== 'undefined' ? localStorage.getItem(REFRESH_TOKEN_KEY) : null;
+}
+
+export function hasClientSession(): boolean {
+    return Boolean(getStoredAccessToken() || getStoredRefreshToken());
+}
+
+export function storeAuthTokens(tokens: AuthTokens) {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access);
+    localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh);
+    window.dispatchEvent(new Event('auth-change'));
+}
+
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
-    const accessToken = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const accessToken = getStoredAccessToken();
     let res = await fetch(url, options);
     if (res.status === 401 && typeof window !== 'undefined') {
-        const refreshToken = localStorage.getItem('refresh_token');
+        const refreshToken = getStoredRefreshToken();
         if (!accessToken && !refreshToken) {
             return res;
         }
@@ -65,10 +95,10 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
 
                 if (refreshRes.ok) {
                     const data = await refreshRes.json();
-                    localStorage.setItem('access_token', data.access);
-                    if (data.refresh) {
-                        localStorage.setItem('refresh_token', data.refresh);
-                    }
+                    storeAuthTokens({
+                        access: data.access,
+                        refresh: data.refresh || refreshToken,
+                    });
 
                     const newOptions = { ...options };
                     newOptions.headers = {
@@ -93,7 +123,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
 }
 
 export function getHeaders(authRequired = true) {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const token = getStoredAccessToken();
     return {
         'Content-Type': 'application/json',
         ...(token && authRequired ? { 'Authorization': `Bearer ${token}` } : {})
@@ -697,8 +727,8 @@ export async function register(userData: RegisterPayload): Promise<AuthUser> {
 
 export function logout() {
     if (typeof window !== 'undefined') {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        localStorage.removeItem(REFRESH_TOKEN_KEY);
         window.dispatchEvent(new Event('auth-change'));
         if (window.location.pathname !== '/login') {
             window.location.href = '/login?expired=1';
@@ -707,9 +737,7 @@ export function logout() {
 }
 
 export async function fetchProfile(): Promise<AuthUser> {
-    const hasSession =
-        typeof window !== 'undefined' &&
-        Boolean(localStorage.getItem('access_token') || localStorage.getItem('refresh_token'));
+    const hasSession = hasClientSession();
 
     const res = await fetchWithAuth(`${API_URL}/users/me/`, {
         headers: getHeaders(),

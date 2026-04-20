@@ -7,6 +7,7 @@ import {
     fetchMyPosts,
     fetchProfile,
     getErrorMessage,
+    hasClientSession,
     restorePostToDraft,
     submitPostForReview,
     type AuthUser,
@@ -40,7 +41,7 @@ export default function ProfilePage() {
     }, []);
 
     useEffect(() => {
-        if (!localStorage.getItem('access_token')) {
+        if (!hasClientSession()) {
             router.push('/login');
             return;
         }

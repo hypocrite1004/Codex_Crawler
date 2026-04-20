@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getErrorMessage, login, register } from '@/lib/api';
+import { getErrorMessage, login, register, storeAuthTokens } from '@/lib/api';
 
 export default function RegisterPage() {
     const router = useRouter();
@@ -14,9 +14,7 @@ export default function RegisterPage() {
         try {
             await register(formData);
             const data = await login({ username: formData.username, password: formData.password });
-            localStorage.setItem('access_token', data.access);
-            localStorage.setItem('refresh_token', data.refresh);
-            window.dispatchEvent(new Event('auth-change'));
+            storeAuthTokens(data);
             router.push('/');
             router.refresh();
         } catch (error: unknown) {

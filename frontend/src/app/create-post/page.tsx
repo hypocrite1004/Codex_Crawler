@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import type { ReactQuillProps } from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 
-import { createPost, fetchCategories, getErrorMessage, type Category, type CreatePostPayload } from '@/lib/api';
+import { createPost, fetchCategories, getErrorMessage, hasClientSession, type Category, type CreatePostPayload } from '@/lib/api';
 
 const ReactQuill = dynamic<ReactQuillProps>(() => import('react-quill-new').then((mod) => mod.default), {
     ssr: false,
@@ -29,7 +29,7 @@ export default function CreatePostPage() {
     const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
     useEffect(() => {
-        if (!localStorage.getItem('access_token')) {
+        if (!hasClientSession()) {
             router.push('/login');
             return;
         }

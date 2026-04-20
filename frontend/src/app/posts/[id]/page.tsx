@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 
-import { fetchPost, type Post, type PostStatus } from '@/lib/api';
+import { fetchPost, getStoredAccessToken, type Post, type PostStatus } from '@/lib/api';
 import PostComments from '@/components/PostComments';
 import PostSidebar from '@/components/PostSidebar';
 import PostSummary from '@/components/PostSummary';
@@ -29,7 +29,7 @@ export default function PostDetailPage() {
             return;
         }
 
-        const includeAuth = typeof window !== 'undefined' && Boolean(localStorage.getItem('access_token'));
+        const includeAuth = Boolean(getStoredAccessToken());
 
         fetchPost(postId, includeAuth).then((data) => {
             if (!data) {

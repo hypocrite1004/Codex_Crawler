@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-import { fetchProfile, logout } from '@/lib/api';
+import { fetchProfile, getStoredAccessToken, hasClientSession, logout } from '@/lib/api';
 
 export default function Navbar() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -30,9 +30,9 @@ export default function Navbar() {
 
     useEffect(() => {
         const checkAuth = () => {
-            const token = localStorage.getItem('access_token');
-            setIsAuthenticated(Boolean(token));
-            if (token) {
+            const hasSession = hasClientSession();
+            setIsAuthenticated(hasSession);
+            if (getStoredAccessToken()) {
                 fetchProfile()
                     .then((user) => setIsStaff(Boolean(user.is_staff)))
                     .catch(() => setIsStaff(false));
