@@ -77,9 +77,7 @@ class PostCveMentionSerializer(serializers.ModelSerializer):
             'mention_count',
             'vendor',
             'product',
-            'source',
             'mentioned_in',
-            'legacy_reference_ids',
             'created_at',
         ]
         read_only_fields = fields

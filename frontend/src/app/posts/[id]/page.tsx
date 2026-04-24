@@ -8,6 +8,7 @@ import { fetchPost, getStoredAccessToken, type Post, type PostStatus } from '@/l
 import PostComments from '@/components/PostComments';
 import PostSidebar from '@/components/PostSidebar';
 import PostSummary from '@/components/PostSummary';
+import PostUnderstandingCard from '@/components/PostUnderstandingCard';
 
 const STATUS_STYLES: Record<PostStatus, { label: string; color: string; background: string; border: string }> = {
     draft: { label: 'Draft', color: '#cbd5e1', background: 'rgba(148, 163, 184, 0.12)', border: 'rgba(148, 163, 184, 0.3)' },
@@ -141,6 +142,8 @@ export default function PostDetailPage() {
                                 )}
                             </header>
 
+                            <PostUnderstandingCard post={post} />
+
                             <section
                                 className="post-content"
                                 style={{ color: 'var(--text-secondary)', fontSize: '1.05rem', lineHeight: 1.7 }}
@@ -186,7 +189,7 @@ export default function PostDetailPage() {
                                                     gap: '0.35rem',
                                                 }}
                                             >
-                                                <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{mention.cve_id}</div>
+                                                <Link href={`/cves/${mention.cve}`} style={{ color: 'var(--text-primary)', fontWeight: 600, textDecoration: 'none' }}>{mention.cve_id}</Link>
                                                 <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
                                                     <span>위치: {mention.mentioned_in}</span>
                                                     {mention.severity && <span>심각도: {mention.severity}</span>}

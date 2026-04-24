@@ -571,6 +571,25 @@ P1 시작 조건:
 계획 문서:
 - [p6-content-intelligence-discovery-plan.md](/C:/project/Codex/Crawler/docs/p6-content-intelligence-discovery-plan.md)
 
+### P6 Current Status (UTF-8 safe)
+- [x] P6-1 Public post list discovery UX
+- [x] P6-2 Public post detail understanding card
+- [x] P6-3 CVE/IOC/keyword discovery links
+- [x] P6-4 Public content quality signals
+- [x] P6-5 Public visitor E2E coverage
+
+Implementation records:
+- [p6-1-public-post-list-discovery-implementation.md](/C:/project/Codex/Crawler/docs/p6-1-public-post-list-discovery-implementation.md)
+- [p6-2-p6-5-public-content-understanding-discovery-implementation.md](/C:/project/Codex/Crawler/docs/p6-2-p6-5-public-content-understanding-discovery-implementation.md)
+
+Verification:
+- `python -m py_compile backend/api/serializers.py backend/api/tests.py backend/api/management/commands/seed_e2e_data.py`
+- `python backend/manage.py check`
+- `python backend/manage.py test api.tests.CveFeatureTests --keepdb`
+- `npm run lint`
+- `npm run build`
+- `npm run test:e2e` (10 passed)
+
 ### P6-1. 공개 글 목록 탐색 UX 개선
 - [x] 공개 글 카드에 보안 맥락 신호 표시
 - [x] CVE/IOC/요약/관련 글 여부를 탐색 단서로 활용
@@ -650,3 +669,12 @@ P1 시작 조건:
 - [!] `python manage.py check`
   - 차단 사유: `pgvector` 모듈 미설치
 - [x] 다음 작업: 로컬 백엔드 실행 환경 복구 후 P0-4 수동 QA 체크리스트 수행
+## 2026-04-24 P6 Completion Update
+- [x] P6 completed: public list discovery, detail understanding card, CVE/IOC/keyword discovery links, public-safe quality signals, and public visitor E2E coverage.
+- [x] Implementation record: [p6-2-p6-5-public-content-understanding-discovery-implementation.md](/C:/project/Codex/Crawler/docs/p6-2-p6-5-public-content-understanding-discovery-implementation.md)
+- [x] Verification passed: `python -m py_compile backend/api/serializers.py backend/api/tests.py backend/api/management/commands/seed_e2e_data.py`
+- [x] Verification passed: `python backend/manage.py check`
+- [x] Verification passed: `python backend/manage.py test api.tests.CveFeatureTests --keepdb`
+- [x] Verification passed: `npm run lint`
+- [x] Verification passed: `npm run build`
+- [x] Verification passed: `npm run test:e2e` (10 passed)

@@ -1246,7 +1246,10 @@ class CveFeatureTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data['cve_mentions']), 1)
-        self.assertEqual(response.data['cve_mentions'][0]['cve_id'], 'CVE-2025-12345')
+        mention = response.data['cve_mentions'][0]
+        self.assertEqual(mention['cve_id'], 'CVE-2025-12345')
+        self.assertNotIn('source', mention)
+        self.assertNotIn('legacy_reference_ids', mention)
 
     def test_posts_can_be_filtered_by_cve_id(self):
         response = self.client.get('/api/posts/?cve=CVE-2025-12345')

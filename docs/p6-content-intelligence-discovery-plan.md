@@ -37,7 +37,7 @@ Implementation record:
 
 ## P6-2. Public Post Detail Understanding Card
 
-Status: planned
+Status: completed
 
 Objective:
 - Help visitors understand a post before reading the full article.
@@ -48,12 +48,15 @@ Scope:
 - Clearly show why the post matters when enough data exists.
 
 Acceptance criteria:
-- Public visitors can see summary/context/CVE/IOC signals near the top of the post detail.
-- Posts without enriched metadata degrade gracefully.
+- Completed: public visitors can see summary/context/CVE/IOC signals near the top of the post detail.
+- Completed: posts without enriched metadata degrade gracefully.
+
+Implementation record:
+- [p6-2-p6-5-public-content-understanding-discovery-implementation.md](/C:/project/Codex/Crawler/docs/p6-2-p6-5-public-content-understanding-discovery-implementation.md)
 
 ## P6-3. CVE/IOC/Keyword Discovery Links
 
-Status: planned
+Status: completed
 
 Objective:
 - Turn structured security signals into navigation paths.
@@ -64,12 +67,15 @@ Scope:
 - Connect related posts from post detail.
 
 Acceptance criteria:
-- Public visitors can continue from a post to at least one related security context.
-- Discovery links do not expose operator-only fields.
+- Completed: public visitors can continue from a post to CVE detail, IOC search, keyword search, or related coverage.
+- Completed: discovery links do not expose operator-only fields.
+
+Implementation record:
+- [p6-2-p6-5-public-content-understanding-discovery-implementation.md](/C:/project/Codex/Crawler/docs/p6-2-p6-5-public-content-understanding-discovery-implementation.md)
 
 ## P6-4. Public Content Quality Signals
 
-Status: planned
+Status: completed
 
 Objective:
 - Give visitors lightweight confidence and usefulness signals without exposing internal crawler operations.
@@ -79,12 +85,15 @@ Scope:
 - Avoid exposing internal crawler failure details to guests.
 
 Acceptance criteria:
-- Visitors can judge whether a post has enough context to read further.
-- Internal crawler diagnostics remain admin-only.
+- Completed: visitors can judge source, date, summary, CVE, IOC, and related coverage signals before reading further.
+- Completed: internal crawler diagnostics remain admin-only.
+
+Implementation record:
+- [p6-2-p6-5-public-content-understanding-discovery-implementation.md](/C:/project/Codex/Crawler/docs/p6-2-p6-5-public-content-understanding-discovery-implementation.md)
 
 ## P6-5. Public Visitor E2E Coverage
 
-Status: planned
+Status: completed
 
 Objective:
 - Lock the public understanding and discovery flow.
@@ -95,8 +104,30 @@ Scope:
 - Verify at least one CVE or related-content discovery path.
 
 Acceptance criteria:
-- `npm run test:e2e` covers a public visitor P6 flow.
-- Existing E2E tests remain passing.
+- Completed: `npm run test:e2e` covers public list-to-detail understanding and CVE discovery flow.
+- Completed: existing E2E tests remain passing.
+
+Implementation record:
+- [p6-2-p6-5-public-content-understanding-discovery-implementation.md](/C:/project/Codex/Crawler/docs/p6-2-p6-5-public-content-understanding-discovery-implementation.md)
+
+## P6 Completion
+
+Status: completed
+
+Completed scope:
+- P6-1 public list discovery UX.
+- P6-2 public post detail understanding card.
+- P6-3 CVE/IOC/keyword discovery links.
+- P6-4 public content quality signals.
+- P6-5 public visitor E2E coverage.
+
+Verification:
+- `python -m py_compile backend/api/serializers.py backend/api/tests.py backend/api/management/commands/seed_e2e_data.py`
+- `python backend/manage.py check`
+- `python backend/manage.py test api.tests.CveFeatureTests --keepdb`
+- `npm run lint`
+- `npm run build`
+- `npm run test:e2e`
 
 ## Notes
 

@@ -68,7 +68,6 @@ export interface CveMention {
     vendor: string;
     product: string;
     mentioned_in: 'title' | 'content' | 'both';
-    legacy_reference_ids: number[];
     created_at: string;
 }
 

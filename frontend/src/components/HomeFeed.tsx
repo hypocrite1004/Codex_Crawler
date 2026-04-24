@@ -12,6 +12,15 @@ const CARD_MIN_WIDTH = 320;
 const ROW_HEIGHT = 420;
 const OVERSCAN_ROWS = 3;
 
+function getInitialQueryParam(name: string) {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get(name) || "";
+}
+
+function getInitialBooleanParam(name: string) {
+    return getInitialQueryParam(name).toLowerCase() === "true";
+}
+
 function dedupePosts(items: PostListItem[]) {
     const seen = new Set<number>();
     return items.filter((item) => {
@@ -34,16 +43,16 @@ export default function HomeFeed() {
     const [containerWidth, setContainerWidth] = useState(0);
     const [viewportState, setViewportState] = useState({ scrollTop: 0, viewportHeight: 0 });
 
-    const [searchQuery, setSearchQuery] = useState("");
-    const [debouncedQuery, setDebouncedQuery] = useState("");
+    const [searchQuery, setSearchQuery] = useState(() => getInitialQueryParam("search"));
+    const [debouncedQuery, setDebouncedQuery] = useState(() => getInitialQueryParam("search"));
     const [filterSite, setFilterSite] = useState("");
     const [filterDateFrom, setFilterDateFrom] = useState("");
     const [filterDateTo, setFilterDateTo] = useState("");
-    const [filterCve, setFilterCve] = useState("");
+    const [filterCve, setFilterCve] = useState(() => getInitialQueryParam("cve"));
     const [filterSummarized, setFilterSummarized] = useState(false);
     const [filterShared, setFilterShared] = useState(false);
-    const [filterSecurityContext, setFilterSecurityContext] = useState(false);
-    const [showFilters, setShowFilters] = useState(false);
+    const [filterSecurityContext, setFilterSecurityContext] = useState(() => getInitialBooleanParam("has_security_context"));
+    const [showFilters, setShowFilters] = useState(() => Boolean(getInitialQueryParam("cve") || getInitialBooleanParam("has_security_context")));
 
     const sentinelRef = useRef<HTMLDivElement | null>(null);
     const gridRef = useRef<HTMLDivElement | null>(null);
