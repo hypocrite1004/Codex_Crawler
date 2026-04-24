@@ -20,6 +20,8 @@ export default function HomeFeedFilters({
   onSummarizedChange,
   filterShared,
   onSharedChange,
+  filterSecurityContext,
+  onSecurityContextChange,
   activeCategory,
   onCategoryChange,
   categories,
@@ -44,6 +46,8 @@ export default function HomeFeedFilters({
   onSummarizedChange: (value: boolean) => void;
   filterShared: boolean;
   onSharedChange: (value: boolean) => void;
+  filterSecurityContext: boolean;
+  onSecurityContextChange: (value: boolean) => void;
   activeCategory: number | null;
   onCategoryChange: (value: number | null) => void;
   categories: Category[];
@@ -97,7 +101,11 @@ export default function HomeFeedFilters({
                 <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 500 }}>CVE ID</label>
                 <input type="text" value={filterCve} onChange={(event) => onCveChange(event.target.value)} placeholder="CVE-2025-12345" style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', padding: '9px 14px', borderRadius: 10, fontSize: '0.9rem', outline: 'none' }} />
               </div>
-              <div style={{ display: 'flex', gap: '1.5rem', paddingBottom: '0.5rem', flex: '1 1 220px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '1.5rem', paddingBottom: '0.5rem', flex: '1 1 340px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-primary)', fontSize: '0.95rem', cursor: 'pointer', userSelect: 'none' }}>
+                  <input type="checkbox" checked={filterSecurityContext} onChange={(event) => onSecurityContextChange(event.target.checked)} style={{ width: 18, height: 18, accentColor: 'var(--accent-primary)', cursor: 'pointer' }} />
+                  <span>보안 맥락 포함</span>
+                </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-primary)', fontSize: '0.95rem', cursor: 'pointer', userSelect: 'none' }}>
                   <input type="checkbox" checked={filterSummarized} onChange={(event) => onSummarizedChange(event.target.checked)} style={{ width: 18, height: 18, accentColor: 'var(--accent-primary)', cursor: 'pointer' }} />
                   <span>AI 요약만</span>

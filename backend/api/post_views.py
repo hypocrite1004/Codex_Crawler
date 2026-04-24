@@ -132,6 +132,8 @@ class PostViewSet(viewsets.ModelViewSet):
                     'is_summarized',
                     'status',
                     'created_at',
+                    'published_at',
+                    'iocs',
                 )
                 .order_by('-created_at')
             )
@@ -194,6 +196,18 @@ class PostViewSet(viewsets.ModelViewSet):
         cve_id = params.get('cve')
         if cve_id:
             qs = qs.filter(cve_mentions__cve__cve_id__iexact=cve_id)
+
+        if getattr(self, 'action', None) == 'list' and not is_admin_list:
+            if params.get('has_security_context') == 'true':
+                qs = qs.filter(
+                    Q(cve_mentions__isnull=False)
+                    | Q(related_posts__isnull=False)
+                    | Q(is_summarized=True)
+                    | Q(is_shared=True)
+                    | (Q(iocs__isnull=False) & ~Q(iocs=[]))
+                )
+            if params.get('ordering') == 'security_context':
+                qs = qs.order_by('-cve_count', '-related_count', '-is_summarized', '-is_shared', '-created_at')
 
         mine_only = params.get('mine') == 'true'
         if mine_only and self.request.user.is_authenticated:

@@ -2,6 +2,16 @@ import Link from 'next/link';
 
 import type { PostListItem } from '@/lib/api';
 
+function securitySignalText(post: PostListItem) {
+  const signals = [
+    post.cve_count > 0 ? `${post.cve_count} CVE` : null,
+    post.ioc_count > 0 ? `${post.ioc_count} IOC` : null,
+    post.related_count > 0 ? `${post.related_count} related` : null,
+    post.is_summarized ? 'summary' : null,
+  ].filter(Boolean);
+  return signals.length ? `Security context: ${signals.join(' · ')}` : 'Basic article context';
+}
+
 export default function HomeFeedGrid({
   posts,
   visiblePosts,
@@ -56,13 +66,22 @@ export default function HomeFeedGrid({
                     {highlightText(post.content_preview, debouncedQuery)}
                   </p>
 
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                    {post.is_summarized && <span style={{ fontSize: '0.72rem', color: '#38bdf8', background: 'rgba(14,165,233,0.14)', border: '1px solid rgba(56,189,248,0.22)', padding: '3px 8px', borderRadius: 999, fontWeight: 700 }}>요약 있음</span>}
+                    {post.ioc_count > 0 && <span style={{ fontSize: '0.72rem', color: '#fbbf24', background: 'rgba(251,191,36,0.13)', border: '1px solid rgba(251,191,36,0.25)', padding: '3px 8px', borderRadius: 999, fontWeight: 700 }}>IOC {post.ioc_count}</span>}
+                    {post.related_count > 0 && <span style={{ fontSize: '0.72rem', color: '#c4b5fd', background: 'rgba(139,92,246,0.14)', border: '1px solid rgba(196,181,253,0.22)', padding: '3px 8px', borderRadius: 999, fontWeight: 700 }}>관련 {post.related_count}</span>}
+                  </div>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginBottom: 14, minHeight: 18 }}>
+                    {securitySignalText(post)}
+                  </div>
+
                   <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: '0.85rem', color: 'var(--text-secondary)', minWidth: 0 }}>
                       <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, flexShrink: 0 }}>
                         {post.author?.username ? post.author.username.charAt(0).toUpperCase() : '?'}
                       </div>
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {post.author?.username || 'Unknown'} · {new Date(post.created_at).toLocaleDateString()}
+                        {post.author?.username || 'Unknown'} · {new Date(post.published_at || post.created_at).toLocaleDateString()}
                       </span>
                     </div>
                     {post.related_count > 0 && <span style={{ fontSize: '0.75rem', color: '#8b5cf6', background: 'rgba(139,92,246,0.15)', padding: '2px 8px', borderRadius: 12, fontWeight: 600, flexShrink: 0 }}>+ {post.related_count} 연관 글</span>}

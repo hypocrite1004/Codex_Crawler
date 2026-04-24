@@ -18,19 +18,22 @@ Success criterion:
 
 ## P6-1. Public Post List Discovery UX
 
-Status: planned
+Status: completed
 
 Objective:
 - Improve the public list so visitors can find meaningful security content faster than chronological browsing alone.
 
 Scope:
-- Add discovery cues to public post cards.
-- Expose CVE count, IOC presence, summary availability, or importance signals where available.
-- Improve filtering or sorting paths for CVE/security relevance.
+- Added discovery cues to public post cards.
+- Exposed CVE count, IOC presence, summary availability, and related coverage signals where available.
+- Improved filtering and sorting paths for posts with security context.
 
 Acceptance criteria:
-- Public visitors can identify posts with richer security context from the list.
-- Existing public list behavior remains stable.
+- Completed: public visitors can identify posts with richer security context from the list.
+- Completed: existing public list behavior remains stable.
+
+Implementation record:
+- [p6-1-public-post-list-discovery-implementation.md](/C:/project/Codex/Crawler/docs/p6-1-public-post-list-discovery-implementation.md)
 
 ## P6-2. Public Post Detail Understanding Card
 

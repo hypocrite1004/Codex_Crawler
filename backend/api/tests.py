@@ -1216,6 +1216,9 @@ class CveFeatureTests(APITestCase):
             category=self.category,
             status='published',
             is_draft=False,
+            is_summarized=True,
+            published_at=timezone.now(),
+            iocs=['198.51.100.10'],
         )
         self.other_post = Post.objects.create(
             title='Another Post',
@@ -1252,6 +1255,19 @@ class CveFeatureTests(APITestCase):
         self.assertIn('results', response.data)
         returned_ids = [item['id'] for item in response.data['results']]
         self.assertEqual(returned_ids, [self.post.id])
+
+    def test_public_post_list_exposes_discovery_signals_and_context_filter(self):
+        response = self.client.get('/api/posts/?has_security_context=true&ordering=security_context')
+
+        self.assertEqual(response.status_code, 200)
+        returned_ids = [item['id'] for item in response.data['results']]
+        self.assertEqual(returned_ids, [self.post.id])
+        item = response.data['results'][0]
+        self.assertEqual(item['cve_count'], 1)
+        self.assertEqual(item['ioc_count'], 1)
+        self.assertTrue(item['is_summarized'])
+        self.assertIsNotNone(item['published_at'])
+        self.assertNotIn('legacy_mention_count', item)
 
     def test_cve_list_returns_post_count_and_supports_severity_filter(self):
         response = self.client.get('/api/cves/?severity=HIGH')

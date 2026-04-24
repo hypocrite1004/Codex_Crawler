@@ -150,8 +150,10 @@ export interface PostListItem {
     is_summarized: boolean;
     status: PostStatus;
     created_at: string;
+    published_at?: string | null;
     related_count: number;
     cve_count: number;
+    ioc_count: number;
     content_preview: string;
 }
 

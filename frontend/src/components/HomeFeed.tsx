@@ -9,7 +9,7 @@ import HomeFeedGrid from "./HomeFeedGrid";
 const PAGE_SIZE = 24;
 const GRID_GAP = 24;
 const CARD_MIN_WIDTH = 320;
-const ROW_HEIGHT = 360;
+const ROW_HEIGHT = 420;
 const OVERSCAN_ROWS = 3;
 
 function dedupePosts(items: PostListItem[]) {
@@ -42,6 +42,7 @@ export default function HomeFeed() {
     const [filterCve, setFilterCve] = useState("");
     const [filterSummarized, setFilterSummarized] = useState(false);
     const [filterShared, setFilterShared] = useState(false);
+    const [filterSecurityContext, setFilterSecurityContext] = useState(false);
     const [showFilters, setShowFilters] = useState(false);
 
     const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -114,9 +115,13 @@ export default function HomeFeed() {
         if (filterCve.trim()) params.cve = filterCve.trim();
         if (filterSummarized) params.is_summarized = "true";
         if (filterShared) params.is_shared = "true";
+        if (filterSecurityContext) {
+            params.has_security_context = "true";
+            params.ordering = "security_context";
+        }
         if (activeCategory) params.category = String(activeCategory);
         return params;
-    }, [activeCategory, debouncedQuery, filterCve, filterDateFrom, filterDateTo, filterShared, filterSite, filterSummarized]);
+    }, [activeCategory, debouncedQuery, filterCve, filterDateFrom, filterDateTo, filterSecurityContext, filterShared, filterSite, filterSummarized]);
 
     const requestKey = useMemo(() => JSON.stringify(requestFilters), [requestFilters]);
 
@@ -240,6 +245,8 @@ export default function HomeFeed() {
                 onSummarizedChange={(value) => triggerReset(setFilterSummarized, value)}
                 filterShared={filterShared}
                 onSharedChange={(value) => triggerReset(setFilterShared, value)}
+                filterSecurityContext={filterSecurityContext}
+                onSecurityContextChange={(value) => triggerReset(setFilterSecurityContext, value)}
                 activeCategory={activeCategory}
                 onCategoryChange={(value) => triggerReset(setActiveCategory, value)}
                 categories={categories}

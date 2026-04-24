@@ -181,6 +181,7 @@ class PostListSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     related_count = serializers.IntegerField(read_only=True, default=0)
     cve_count = serializers.IntegerField(read_only=True, default=0)
+    ioc_count = serializers.SerializerMethodField()
     content_preview = serializers.SerializerMethodField()
 
     class Meta:
@@ -197,11 +198,16 @@ class PostListSerializer(serializers.ModelSerializer):
             'is_summarized',
             'status',
             'created_at',
+            'published_at',
             'related_count',
             'cve_count',
+            'ioc_count',
             'content_preview',
         ]
         read_only_fields = fields
+
+    def get_ioc_count(self, obj):
+        return len(obj.iocs or [])
 
     def get_content_preview(self, obj):
         preview = strip_tags(obj.content or '').strip()

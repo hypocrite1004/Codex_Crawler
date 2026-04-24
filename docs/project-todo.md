@@ -572,12 +572,15 @@ P1 시작 조건:
 - [p6-content-intelligence-discovery-plan.md](/C:/project/Codex/Crawler/docs/p6-content-intelligence-discovery-plan.md)
 
 ### P6-1. 공개 글 목록 탐색 UX 개선
-- [ ] 공개 글 카드에 보안 맥락 신호 표시
-- [ ] CVE/IOC/요약/관련 글 여부를 탐색 단서로 활용
-- [ ] 기존 공개 목록 동작 회귀 방지
+- [x] 공개 글 카드에 보안 맥락 신호 표시
+- [x] CVE/IOC/요약/관련 글 여부를 탐색 단서로 활용
+- [x] 기존 공개 목록 동작 회귀 방지
 
 우선순위:
 - `높음`
+
+구현 문서:
+- [p6-1-public-post-list-discovery-implementation.md](/C:/project/Codex/Crawler/docs/p6-1-public-post-list-discovery-implementation.md)
 
 ### P6-2. 글 상세 이해 카드 추가
 - [ ] 요약/CVE/IOC/source/published metadata를 상단 이해 카드로 정리
@@ -628,7 +631,8 @@ P1 시작 조건:
 - [x] `P5-3 재시도/auto-disable 정책 고도화` 완료
 - [x] `P5-4 운영 경보` 완료
 - [x] `P5-5 안정성 테스트 보강` 완료
-- [ ] `P6-1 공개 글 목록 탐색 UX 개선` 착수
+- [x] `P6-1 공개 글 목록 탐색 UX 개선` 완료
+- [ ] `P6-2 글 상세 이해 카드 추가` 착수
 - [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료
