@@ -1,5 +1,5 @@
 import { API_URL, fetchWithAuth, getHeaders, logout } from './core';
-import type { CrawlItem, CrawlerLog, CrawlerMetrics, CrawlerPreviewItem, CrawlerRun, CrawlerSource } from './types';
+import type { CrawlItem, CrawlerLog, CrawlerMetrics, CrawlerPreviewItem, CrawlerRun, CrawlerSource, CrawlerSourceQualityDetail } from './types';
 
 export async function fetchCrawlerSources(): Promise<CrawlerSource[]> {
     try {
@@ -88,6 +88,23 @@ export async function fetchCrawlerMetrics(): Promise<CrawlerMetrics> {
     const res = await fetchWithAuth(`${API_URL}/crawler-runs/metrics/`, { headers: getHeaders() });
     if (!res.ok) throw new Error('Failed to fetch crawler metrics');
     return res.json();
+}
+
+export async function fetchCrawlerSourceQuality(id: number): Promise<CrawlerSourceQualityDetail> {
+    const res = await fetchWithAuth(`${API_URL}/crawler-sources/${id}/quality/`, { headers: getHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch crawler source quality');
+    return res.json();
+}
+
+export async function markCrawlerSourceNeedsReview(id: number, reason: string): Promise<{ status: string; source: CrawlerSource }> {
+    const res = await fetchWithAuth(`${API_URL}/crawler-sources/${id}/mark_needs_review/`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ reason }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to mark source as needs review');
+    return data;
 }
 
 export async function previewCrawl(data: Partial<CrawlerSource>): Promise<{ items: CrawlerPreviewItem[]; status: string; error: string }> {

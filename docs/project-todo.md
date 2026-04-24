@@ -684,7 +684,7 @@ Verification:
 - [x] P7-2 Recent crawler quality audit completed.
 - [x] P7-3 Storage quality guardrails completed.
 - [x] P7-4 Source-level quality metrics completed.
-- [ ] P7-5 Remediation flow planned.
+- [x] P7-5 Remediation flow completed.
 
 Plan:
 - [p7-crawler-accuracy-content-quality-plan.md](/C:/project/Codex/Crawler/docs/p7-crawler-accuracy-content-quality-plan.md)
@@ -693,6 +693,7 @@ Implementation records:
 - [p7-1-p7-2-crawler-quality-audit-implementation.md](/C:/project/Codex/Crawler/docs/p7-1-p7-2-crawler-quality-audit-implementation.md)
 - [p7-3-storage-quality-guardrails-implementation.md](/C:/project/Codex/Crawler/docs/p7-3-storage-quality-guardrails-implementation.md)
 - [p7-4-source-quality-metrics-implementation.md](/C:/project/Codex/Crawler/docs/p7-4-source-quality-metrics-implementation.md)
+- [p7-5-remediation-flow-implementation.md](/C:/project/Codex/Crawler/docs/p7-5-remediation-flow-implementation.md)
 
 Verification:
 - [x] `python -m py_compile backend/api/crawler_quality.py backend/api/management/commands/audit_crawler_quality.py backend/api/management/commands/seed_e2e_data.py backend/api/tests.py`
@@ -700,7 +701,7 @@ Verification:
 - [x] `python backend/manage.py seed_e2e_data`
 - [x] `python backend/manage.py audit_crawler_quality --days 30 --limit 5`
 - [x] `python backend/manage.py check`
-- [x] `python backend/manage.py test api.tests --keepdb` (59 tests)
+- [x] `python backend/manage.py test api.tests --keepdb` (63 tests)
 - [x] `npm run lint`
 - [x] `python -m py_compile backend/api/crawler_persistence.py backend/api/crawler_diagnostics.py backend/api/tests.py`
 - [x] `python backend/manage.py test api.tests.CrawlRunTrackingTests.test_low_quality_items_are_filtered_before_post_creation --keepdb`
@@ -709,3 +710,6 @@ Verification:
 - [x] `python -m py_compile backend/api/crawler_quality.py backend/api/crawler_views.py backend/api/tests.py`
 - [x] `python backend/manage.py test api.tests.CrawlRunTrackingTests.test_crawler_metrics_endpoint_returns_source_quality_summaries api.tests.CrawlRunTrackingTests.test_crawler_metrics_endpoint_returns_period_and_source_summaries --keepdb`
 - [x] `npm run build` from `frontend/`
+- [x] `python -m py_compile backend/api/crawler_views.py backend/api/tests.py`
+- [x] `python backend/manage.py test api.tests.CrawlRunTrackingTests.test_crawler_source_quality_endpoint_returns_remediation_details api.tests.CrawlRunTrackingTests.test_mark_needs_review_pauses_crawler_source api.tests.CrawlRunTrackingTests.test_crawler_source_quality_endpoint_rejects_invalid_window --keepdb`
+- [x] `python backend/manage.py test api.tests.CrawlRunTrackingTests api.tests.CrawlerQualityAuditTests --keepdb` (38 tests)

@@ -372,6 +372,71 @@ class CrawlRunTrackingTests(APITestCase):
         alert_categories = {alert['category'] for alert in response.data['alerts']}
         self.assertIn('quality_error_findings', alert_categories)
 
+    def test_crawler_source_quality_endpoint_returns_remediation_details(self):
+        now = timezone.now()
+        crawl_run = CrawlRun.objects.create(
+            source=self.source,
+            triggered_by='manual',
+            status='success',
+            started_at=now,
+            finished_at=now,
+            articles_found=1,
+            articles_created=1,
+        )
+        bad_post = Post.objects.create(
+            title='(No title)',
+            content='',
+            source_url='https://example.com/needs-review',
+            normalized_source_url='https://example.com/needs-review',
+            site=self.source.name,
+            author=self.user,
+            status='published',
+        )
+        crawl_item = CrawlItem.objects.create(
+            run=crawl_run,
+            post=bad_post,
+            item_status='created',
+            source_url=bad_post.source_url,
+            normalized_url=bad_post.normalized_source_url,
+            title=bad_post.title,
+        )
+
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(f'/api/crawler-sources/{self.source.id}/quality/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['summary']['quality_status'], 'error')
+        self.assertEqual(response.data['summary']['error_count'], 2)
+        self.assertEqual(response.data['latest_run_id'], crawl_run.id)
+        self.assertEqual(response.data['affected_posts'][0]['post_id'], bad_post.id)
+        self.assertEqual(response.data['affected_posts'][0]['crawl_item_id'], crawl_item.id)
+        issue_codes = {issue['code'] for issue in response.data['affected_posts'][0]['issues']}
+        self.assertIn('missing_title', issue_codes)
+        self.assertIn('missing_content', issue_codes)
+        self.assertTrue(any('selectors' in action for action in response.data['recommended_actions']))
+
+    def test_mark_needs_review_pauses_crawler_source(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.post(
+            f'/api/crawler-sources/{self.source.id}/mark_needs_review/',
+            {'reason': 'Missing content from quality audit.'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.source.refresh_from_db()
+        self.assertFalse(self.source.is_active)
+        self.assertEqual(self.source.last_status, 'error')
+        self.assertIn('Needs selector review', self.source.last_error_message)
+        self.assertIn('Missing content', self.source.last_error_message)
+
+    def test_crawler_source_quality_endpoint_rejects_invalid_window(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(f'/api/crawler-sources/{self.source.id}/quality/?days=bad')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('days and limit must be integers', response.data['error'])
+
     def test_crawler_metrics_endpoint_returns_reliability_alerts(self):
         now = timezone.now()
         for index in range(3):

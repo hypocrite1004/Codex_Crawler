@@ -103,15 +103,24 @@ Implementation record:
 
 ## P7-5. Remediation Flow
 
-Status: planned
+Status: completed
 
 Objective:
 - Let operators act on quality findings.
 
-Candidate scope:
-- Re-run source or item.
-- Mark a source as needs selector review.
-- Link affected posts/items from the quality report to admin surfaces.
+Scope:
+- Add a source-level quality detail endpoint with affected posts and run evidence.
+- Link affected quality posts to public post detail and crawl run history from the admin crawler screen.
+- Let operators pause a source as needing selector review.
+- Keep rerun support at source level because item-level rerun is not yet a crawler execution unit.
+
+Acceptance criteria:
+- Completed: operators can inspect affected posts for a source quality issue.
+- Completed: operators can jump from quality findings to run history and source editing.
+- Completed: operators can pause a problematic source for selector review.
+
+Implementation record:
+- [p7-5-remediation-flow-implementation.md](/C:/project/Codex/Crawler/docs/p7-5-remediation-flow-implementation.md)
 
 ## Verification
 
@@ -129,3 +138,6 @@ Candidate scope:
 - `python -m py_compile backend/api/crawler_quality.py backend/api/crawler_views.py backend/api/tests.py`
 - `python backend/manage.py test api.tests.CrawlRunTrackingTests.test_crawler_metrics_endpoint_returns_source_quality_summaries api.tests.CrawlRunTrackingTests.test_crawler_metrics_endpoint_returns_period_and_source_summaries --keepdb`
 - `npm run build` from `frontend/`
+- `python -m py_compile backend/api/crawler_views.py backend/api/tests.py`
+- `python backend/manage.py test api.tests.CrawlRunTrackingTests.test_crawler_source_quality_endpoint_returns_remediation_details api.tests.CrawlRunTrackingTests.test_mark_needs_review_pauses_crawler_source api.tests.CrawlRunTrackingTests.test_crawler_source_quality_endpoint_rejects_invalid_window --keepdb`
+- `python backend/manage.py test api.tests.CrawlRunTrackingTests api.tests.CrawlerQualityAuditTests --keepdb`

@@ -352,6 +352,35 @@ export interface CrawlerSourceQualityMetric {
     issues: CrawlerQualityIssueMetric[];
 }
 
+export interface CrawlerAffectedQualityPost {
+    post_id: number;
+    title: string;
+    source_url: string;
+    created_at: string | null;
+    crawl_item_id: number | null;
+    run_id: number | null;
+    issues: Array<{
+        code: string;
+        severity: 'error' | 'warning' | 'info';
+        message: string;
+    }>;
+}
+
+export interface CrawlerSourceQualityDetail {
+    source: {
+        id: number;
+        name: string;
+        is_active: boolean;
+        health_status: CrawlerSource['health_status'];
+        last_error_message: string;
+    };
+    lookback_days: number;
+    summary: CrawlerSourceQualityMetric;
+    affected_posts: CrawlerAffectedQualityPost[];
+    latest_run_id: number | null;
+    recommended_actions: string[];
+}
+
 export interface CrawlerReliabilityAlert {
     source_id: number;
     source_name: string;

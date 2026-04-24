@@ -11,9 +11,11 @@ import {
     deleteCrawlerSource,
     fetchCategories,
     fetchCrawlerMetrics,
+    fetchCrawlerSourceQuality,
     fetchCrawlerSources,
     fetchProfile,
     getErrorMessage,
+    markCrawlerSourceNeedsReview,
     previewCrawl,
     runCrawl,
     updateCrawlerSource,
@@ -21,6 +23,7 @@ import {
     type CrawlerMetrics,
     type CrawlerPreviewItem,
     type CrawlerSource,
+    type CrawlerSourceQualityDetail,
 } from '@/lib/api';
 
 type CrawlerForm = {
@@ -397,6 +400,118 @@ function QualityCell({ quality }: { quality: CrawlerMetrics['sources'][number]['
     );
 }
 
+function QualityRemediationPanel({
+    source,
+    onEdit,
+    onOpenRuns,
+    onRunNow,
+    onMarkNeedsReview,
+    marking,
+}: {
+    source: CrawlerSource;
+    onEdit: () => void;
+    onOpenRuns: (runId?: number | null) => void;
+    onRunNow: () => void;
+    onMarkNeedsReview: (reason: string) => void;
+    marking: boolean;
+}) {
+    const [detail, setDetail] = useState<CrawlerSourceQualityDetail | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        let active = true;
+        const load = async () => {
+            setLoading(true);
+            setError('');
+            try {
+                const data = await fetchCrawlerSourceQuality(source.id);
+                if (active) setDetail(data);
+            } catch (err: unknown) {
+                if (active) setError(getErrorMessage(err, 'Failed to load quality remediation details'));
+            } finally {
+                if (active) setLoading(false);
+            }
+        };
+        void load();
+        return () => { active = false; };
+    }, [source.id]);
+
+    if (loading) return <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Loading quality remediation details...</div>;
+    if (error) return <div style={{ color: '#fca5a5', fontSize: '0.82rem' }}>{error}</div>;
+    if (!detail) return null;
+
+    const statusColor = {
+        ok: '#86efac',
+        info: '#93c5fd',
+        warning: '#fde68a',
+        error: '#fca5a5',
+    }[detail.summary.quality_status];
+    const reason = detail.summary.issues.map((issue) => `${issue.code}: ${issue.count}`).join(', ') || 'Manual quality review requested.';
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                <div>
+                    <div style={{ color: 'var(--text-primary)', fontWeight: 800 }}>Quality Remediation</div>
+                    <div style={{ marginTop: '0.25rem', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+                        {detail.lookback_days}d lookback · {detail.summary.posts_checked} checked · latest run #{detail.latest_run_id ?? 'none'}
+                    </div>
+                </div>
+                <Badge text={detail.summary.quality_status.toUpperCase()} color={statusColor} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.55rem' }}>
+                <CollectionMetric title="Errors" value={detail.summary.error_count} helper="blocking quality" />
+                <CollectionMetric title="Warnings" value={detail.summary.warning_count} helper="review needed" />
+                <CollectionMetric title="Info" value={detail.summary.info_count} helper="enrichment gaps" />
+                <CollectionMetric title="Affected" value={detail.affected_posts.length} helper="recent posts" />
+            </div>
+
+            <div style={{ padding: '0.8rem 0.9rem', borderRadius: 10, background: 'rgba(0,0,0,0.18)', border: '1px solid var(--glass-border)' }}>
+                <div style={{ color: 'var(--text-primary)', fontWeight: 800, marginBottom: '0.45rem' }}>Recommended Actions</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    {detail.recommended_actions.map((action) => (
+                        <div key={action} style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.5 }}>{action}</div>
+                    ))}
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.8rem' }}>
+                    <button className="btn btn-outline" onClick={onEdit}>Edit selectors</button>
+                    <button className="btn btn-outline" onClick={() => onOpenRuns(detail.latest_run_id)}>Open runs</button>
+                    <button className="btn btn-primary" onClick={onRunNow} disabled={!source.is_active || source.is_running}>Run now</button>
+                    <button className="btn btn-outline" style={{ color: '#f97316', borderColor: '#f97316' }} onClick={() => onMarkNeedsReview(reason)} disabled={marking || source.is_running}>
+                        {marking ? 'Marking' : 'Pause for review'}
+                    </button>
+                </div>
+            </div>
+
+            {!detail.affected_posts.length ? (
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>No affected posts in the current lookback window.</div>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                    {detail.affected_posts.map((post) => (
+                        <div key={post.post_id} style={{ padding: '0.75rem 0.85rem', borderRadius: 10, background: 'rgba(0,0,0,0.18)', border: '1px solid var(--glass-border)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                <div style={{ color: 'var(--text-primary)', fontSize: '0.82rem', fontWeight: 800 }}>{post.title || '(No title)'}</div>
+                                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                                    <a href={`/posts/${post.post_id}`} style={{ color: 'var(--accent-primary)', fontSize: '0.78rem' }}>Open post</a>
+                                    {post.run_id && <button className="btn btn-outline" onClick={() => onOpenRuns(post.run_id)}>Run #{post.run_id}</button>}
+                                </div>
+                            </div>
+                            {post.source_url && <a href={post.source_url} target="_blank" rel="noreferrer" style={{ display: 'block', marginTop: '0.25rem', color: 'var(--accent-primary)', fontSize: '0.72rem', wordBreak: 'break-all' }}>{post.source_url}</a>}
+                            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+                                {post.issues.map((issue) => (
+                                    <Badge key={`${post.post_id}-${issue.code}`} text={issue.code} color={issue.severity === 'error' ? '#fca5a5' : issue.severity === 'warning' ? '#fde68a' : '#93c5fd'} />
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function CrawlerSourcesPage() {
     const router = useRouter();
     const [sources, setSources] = useState<CrawlerSource[]>([]);
@@ -407,8 +522,10 @@ export default function CrawlerSourcesPage() {
     const [form, setForm] = useState<CrawlerForm>(EMPTY_FORM);
     const [saving, setSaving] = useState(false);
     const [crawlingId, setCrawlingId] = useState<number | null>(null);
+    const [reviewingId, setReviewingId] = useState<number | null>(null);
     const [expandedLogs, setExpandedLogs] = useState<number | null>(null);
     const [expandedRuns, setExpandedRuns] = useState<number | null>(null);
+    const [expandedQuality, setExpandedQuality] = useState<number | null>(null);
     const [preferredRunIds, setPreferredRunIds] = useState<Record<number, number>>({});
     const [searchText, setSearchText] = useState('');
     const [healthFilter, setHealthFilter] = useState<HealthFilter>('all');
@@ -482,6 +599,20 @@ export default function CrawlerSourcesPage() {
             toast.error(getErrorMessage(error, 'Crawl failed'));
         } finally {
             setCrawlingId(null);
+        }
+    };
+
+    const markNeedsReview = async (source: CrawlerSource, reason: string) => {
+        setReviewingId(source.id);
+        try {
+            const result = await markCrawlerSourceNeedsReview(source.id, reason);
+            setSources((current) => current.map((item) => item.id === source.id ? result.source : item));
+            await refresh();
+            toast.success('Source paused for selector review');
+        } catch (error: unknown) {
+            toast.error(getErrorMessage(error, 'Failed to pause source for review'));
+        } finally {
+            setReviewingId(null);
         }
     };
 
@@ -604,6 +735,7 @@ export default function CrawlerSourcesPage() {
             {!sources.length ? <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No crawler sources.</div> : filteredSources.length === 0 ? <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No sources match the current filters.</div> : <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {filteredSources.map((source) => {
                     const health = HEALTH[source.health_status];
+                    const quality = metrics?.quality.sources.find((item) => item.source_id === source.id);
                     return (
                         <div key={source.id} data-testid="crawler-source-card" className="glass-panel" style={{ padding: '1.2rem 1.4rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -615,6 +747,7 @@ export default function CrawlerSourcesPage() {
                                         {source.category_name && <Badge text={source.category_name} color="#14b8a6" />}
                                         {!source.is_active && <Badge text="Scheduler Off" color="#94a3b8" />}
                                         {source.is_active && !source.is_running && due(source.next_crawl_at) && <Badge text="Due Now" color="#22c55e" />}
+                                        {quality && quality.issue_count > 0 && <Badge text={`Quality ${quality.quality_status}`} color={quality.quality_status === 'error' ? '#fca5a5' : quality.quality_status === 'warning' ? '#fde68a' : '#93c5fd'} />}
                                     </div>
                                     <div style={{ marginBottom: '0.45rem', fontSize: '0.83rem', color: 'var(--text-secondary)', wordBreak: 'break-all' }}><a href={source.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-primary)' }}>{source.url}</a></div>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
@@ -632,6 +765,7 @@ export default function CrawlerSourcesPage() {
                                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                                     <button className="btn btn-outline" onClick={() => setExpandedLogs(expandedLogs === source.id ? null : source.id)}>Logs</button>
                                     <button className="btn btn-outline" onClick={() => setExpandedRuns(expandedRuns === source.id ? null : source.id)}>Runs</button>
+                                    <button className="btn btn-outline" onClick={() => setExpandedQuality(expandedQuality === source.id ? null : source.id)}>Quality</button>
                                     <button className="btn btn-outline" onClick={() => openEdit(source)}>Edit</button>
                                     <button className="btn btn-primary" onClick={() => crawl(source)} disabled={!source.is_active || source.is_running || crawlingId === source.id}>{crawlingId === source.id || source.is_running ? 'Running' : 'Run Now'}</button>
                                     <button className="btn btn-outline" style={{ color: '#ef4444', borderColor: '#ef4444' }} onClick={() => remove(source)}>Delete</button>
@@ -653,6 +787,19 @@ export default function CrawlerSourcesPage() {
                             </div>}
                             {expandedRuns === source.id && <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--glass-border)' }}>
                                 <CrawlerRunDrilldown sourceId={source.id} preferredRunId={preferredRunIds[source.id]} />
+                            </div>}
+                            {expandedQuality === source.id && <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--glass-border)' }}>
+                                <QualityRemediationPanel
+                                    source={source}
+                                    onEdit={() => openEdit(source)}
+                                    onOpenRuns={(runId) => {
+                                        if (runId) setPreferredRunIds((current) => ({ ...current, [source.id]: runId }));
+                                        setExpandedRuns(source.id);
+                                    }}
+                                    onRunNow={() => void crawl(source)}
+                                    onMarkNeedsReview={(reason) => void markNeedsReview(source, reason)}
+                                    marking={reviewingId === source.id}
+                                />
                             </div>}
                         </div>
                     );

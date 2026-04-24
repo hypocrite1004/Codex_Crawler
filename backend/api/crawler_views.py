@@ -7,7 +7,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .crawler_quality import summarize_quality_by_source
+from .crawler_quality import analyze_post_quality, summarize_quality_by_source
 from .crawler_security import CrawlerSecurityError, validate_crawler_request_config
 from .models import CrawlerSource, CrawlRun, Post
 from .serializers import CrawlerLogSerializer, CrawlerSourceSerializer, CrawlItemSerializer, CrawlRunSerializer
@@ -61,6 +61,59 @@ class CrawlerSourceViewSet(viewsets.ModelViewSet):
         )[:20]
         return Response(CrawlRunSerializer(runs, many=True).data)
 
+    @action(detail=True, methods=['get'])
+    def quality(self, request, pk=None):
+        source = self.get_object()
+        try:
+            days = min(90, max(1, int(request.query_params.get('days', 7))))
+            limit = min(50, max(1, int(request.query_params.get('limit', 20))))
+        except (TypeError, ValueError):
+            return Response({'error': 'days and limit must be integers.'}, status=status.HTTP_400_BAD_REQUEST)
+        since = timezone.now() - timedelta(days=days)
+        posts = (
+            Post.objects
+            .filter(created_at__gte=since, crawl_items__run__source=source)
+            .annotate(cve_count=Count('cve_mentions', distinct=True))
+            .prefetch_related('crawl_items__run__source')
+            .distinct()
+            .order_by('-created_at')
+        )
+        summary = summarize_quality_by_source(posts)
+        source_summary = next(
+            (item for item in summary['sources'] if item['source_id'] == source.id),
+            self._empty_quality_summary(source),
+        )
+        return Response({
+            'source': {
+                'id': source.id,
+                'name': source.name,
+                'is_active': source.is_active,
+                'health_status': source.health_status(),
+                'last_error_message': source.last_error_message,
+            },
+            'lookback_days': days,
+            'summary': source_summary,
+            'affected_posts': self._affected_quality_posts(source, posts, limit),
+            'latest_run_id': source.runs.order_by('-started_at').values_list('id', flat=True).first(),
+            'recommended_actions': self._quality_recommendations(source_summary),
+        })
+
+    @action(detail=True, methods=['post'])
+    def mark_needs_review(self, request, pk=None):
+        source = self.get_object()
+        if source.is_running:
+            return Response({'error': 'Source is currently running.'}, status=status.HTTP_409_CONFLICT)
+
+        reason = (request.data.get('reason') or 'Quality remediation requested by operator.').strip()
+        source.is_active = False
+        source.last_status = 'error'
+        source.last_error_message = f'Needs selector review: {reason}'
+        source.save(update_fields=['is_active', 'last_status', 'last_error_message'])
+        return Response({
+            'status': 'needs_review',
+            'source': CrawlerSourceSerializer(source).data,
+        })
+
     @action(detail=False, methods=['post'])
     def preview(self, request):
         from .crawler import preview_crawl
@@ -77,6 +130,67 @@ class CrawlerSourceViewSet(viewsets.ModelViewSet):
         if result['status'] == 'error':
             return Response({'status': 'error', 'error': 'Preview failed.'}, status=status.HTTP_502_BAD_GATEWAY)
         return Response(result)
+
+    def _affected_quality_posts(self, source, posts, limit):
+        affected_posts = []
+        for post in posts:
+            issues = analyze_post_quality(post)
+            if not issues:
+                continue
+            crawl_item = next(
+                (
+                    item for item in post.crawl_items.all()
+                    if getattr(getattr(item, 'run', None), 'source_id', None) == source.id
+                ),
+                None,
+            )
+            affected_posts.append({
+                'post_id': post.id,
+                'title': post.title,
+                'source_url': post.source_url,
+                'created_at': post.created_at.isoformat() if post.created_at else None,
+                'crawl_item_id': crawl_item.id if crawl_item else None,
+                'run_id': crawl_item.run_id if crawl_item else None,
+                'issues': [
+                    {
+                        'code': issue.code,
+                        'severity': issue.severity,
+                        'message': issue.message,
+                    }
+                    for issue in issues
+                ],
+            })
+            if len(affected_posts) >= limit:
+                break
+        return affected_posts
+
+    def _empty_quality_summary(self, source):
+        return {
+            'source_id': source.id,
+            'source_name': source.name,
+            'posts_checked': 0,
+            'error_count': 0,
+            'warning_count': 0,
+            'info_count': 0,
+            'issue_count': 0,
+            'quality_status': 'ok',
+            'issues': [],
+        }
+
+    def _quality_recommendations(self, summary):
+        issue_codes = {issue['code'] for issue in summary.get('issues', [])}
+        recommendations = []
+        if issue_codes & {'missing_title', 'missing_content', 'short_content'}:
+            recommendations.append('Review title/content selectors and run Preview before re-enabling the source.')
+        if 'missing_published_at' in issue_codes:
+            recommendations.append('Review date selector or feed published date mapping.')
+        if issue_codes & {'missing_source_url', 'missing_normalized_source_url', 'normalized_source_url_mismatch'}:
+            recommendations.append('Review link selector and URL normalization for this source.')
+        if 'missing_security_context' in issue_codes:
+            recommendations.append('Review extraction/enrichment coverage for CVE and IOC context.')
+        if not recommendations:
+            recommendations.append('No remediation action is required for the current lookback window.')
+        return recommendations
 
 
 class CrawlerRunViewSet(viewsets.ReadOnlyModelViewSet):
