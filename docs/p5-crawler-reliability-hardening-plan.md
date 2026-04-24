@@ -89,13 +89,21 @@ Implementation record:
 
 ## P5-5. Reliability Test Expansion
 
-Status: planned
+Status: completed
 
 Objective:
 - Lock the reliability behavior with backend integration tests and focused E2E checks where UI behavior changes.
 
 Scope:
-- Add stale lock recovery tests.
-- Add run count consistency tests.
-- Add retry/auto-disable policy tests.
-- Add alert visibility E2E if P5-4 changes UI.
+- Added stale lock recovery tests.
+- Added run count consistency tests.
+- Added retry/auto-disable policy tests.
+- Added alert visibility E2E for P5-4 UI changes.
+
+Acceptance criteria:
+- Completed: backend reliability coverage passes in the full `api.tests` suite.
+- Completed: crawler operations E2E verifies reliability alert visibility.
+- Completed: P5 verification evidence is recorded in implementation docs.
+
+Implementation record:
+- [p5-5-crawler-reliability-test-expansion.md](/C:/project/Codex/Crawler/docs/p5-5-crawler-reliability-test-expansion.md)

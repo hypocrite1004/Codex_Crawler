@@ -548,13 +548,16 @@ P1 시작 조건:
 - [p5-4-crawler-reliability-alerts-implementation.md](/C:/project/Codex/Crawler/docs/p5-4-crawler-reliability-alerts-implementation.md)
 
 ### P5-5. 안정성 테스트 보강
-- [ ] stale lock recovery 테스트 확대
-- [ ] run count consistency 테스트 확대
-- [ ] retry/auto-disable 정책 테스트 추가
-- [ ] P5-4 UI 변경 시 E2E 보강
+- [x] stale lock recovery 테스트 확대
+- [x] run count consistency 테스트 확대
+- [x] retry/auto-disable 정책 테스트 추가
+- [x] P5-4 UI 변경 시 E2E 보강
 
 우선순위:
 - `중상`
+
+구현 문서:
+- [p5-5-crawler-reliability-test-expansion.md](/C:/project/Codex/Crawler/docs/p5-5-crawler-reliability-test-expansion.md)
 
 ## 다음 액션
 - [x] `P3-1 Playwright 기반 핵심 E2E 자동화 구현` 완료
@@ -572,7 +575,7 @@ P1 시작 조건:
 - [x] `P5-2 저장 일관성 검증` 완료
 - [x] `P5-3 재시도/auto-disable 정책 고도화` 완료
 - [x] `P5-4 운영 경보` 완료
-- [ ] `P5-5 안정성 테스트 보강` 착수
+- [x] `P5-5 안정성 테스트 보강` 완료
 - [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료
