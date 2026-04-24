@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import toast from 'react-hot-toast';
+import { CrawlerRunDrilldown } from './CrawlerRunDrilldown';
 import {
     createCrawlerSource,
     deleteCrawlerSource,
@@ -258,6 +259,8 @@ export default function CrawlerSourcesPage() {
     const [saving, setSaving] = useState(false);
     const [crawlingId, setCrawlingId] = useState<number | null>(null);
     const [expandedLogs, setExpandedLogs] = useState<number | null>(null);
+    const [expandedRuns, setExpandedRuns] = useState<number | null>(null);
+    const [preferredRunIds, setPreferredRunIds] = useState<Record<number, number>>({});
 
     useEffect(() => {
         const init = async () => {
@@ -311,6 +314,10 @@ export default function CrawlerSourcesPage() {
             const result = await runCrawl(source.id);
             if (result.status === 'running') toast.error(result.error || 'Already running');
             else toast.success(`created ${result.created}, found ${result.found}, attempts ${result.attempt_count}, ${result.duration_seconds}s`);
+            if (result.run_id) {
+                setPreferredRunIds((current) => ({ ...current, [source.id]: result.run_id as number }));
+                setExpandedRuns(source.id);
+            }
             await refresh();
         } catch (error: unknown) {
             toast.error(getErrorMessage(error, 'Crawl failed'));
@@ -376,6 +383,7 @@ export default function CrawlerSourcesPage() {
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                                     <button className="btn btn-outline" onClick={() => setExpandedLogs(expandedLogs === source.id ? null : source.id)}>Logs</button>
+                                    <button className="btn btn-outline" onClick={() => setExpandedRuns(expandedRuns === source.id ? null : source.id)}>Runs</button>
                                     <button className="btn btn-outline" onClick={() => openEdit(source)}>Edit</button>
                                     <button className="btn btn-primary" onClick={() => crawl(source)} disabled={!source.is_active || source.is_running || crawlingId === source.id}>{crawlingId === source.id || source.is_running ? 'Running' : 'Run Now'}</button>
                                     <button className="btn btn-outline" style={{ color: '#ef4444', borderColor: '#ef4444' }} onClick={() => remove(source)}>Delete</button>
@@ -394,6 +402,9 @@ export default function CrawlerSourcesPage() {
                                         {log.error_message && <span style={{ color: '#fca5a5', fontSize: '0.79rem' }}>{log.error_message}</span>}
                                     </div>)}
                                 </div>}
+                            </div>}
+                            {expandedRuns === source.id && <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--glass-border)' }}>
+                                <CrawlerRunDrilldown sourceId={source.id} preferredRunId={preferredRunIds[source.id]} />
                             </div>}
                         </div>
                     );

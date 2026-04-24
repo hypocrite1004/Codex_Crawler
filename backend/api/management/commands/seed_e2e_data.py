@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from api.models import Category, Comment, CveRecord, Post, PostCveMention
+from api.models import Category, Comment, CrawlItem, CrawlerLog, CrawlerSource, CrawlRun, CveRecord, Post, PostCveMention
 
 
 class Command(BaseCommand):
@@ -188,5 +188,98 @@ class Command(BaseCommand):
                 'legacy_reference_ids': [],
             },
         )
+
+        crawler_source, _ = CrawlerSource.objects.update_or_create(
+            name='E2E Crawler Diagnostics',
+            defaults={
+                'url': 'https://example.com/e2e-feed.xml',
+                'source_type': 'rss',
+                'is_active': True,
+                'category': news,
+                'crawl_interval': 60,
+                'last_crawled_at': now,
+                'last_success_at': now,
+                'last_run_started_at': now,
+                'last_status': 'success',
+                'consecutive_failures': 0,
+                'max_retries': 2,
+                'retry_backoff_minutes': 10,
+                'auto_disable_after_failures': 5,
+            },
+        )
+        if not CrawlerLog.objects.filter(source=crawler_source, triggered_by='manual', articles_found=4, articles_created=1).exists():
+            CrawlerLog.objects.create(
+                source=crawler_source,
+                status='success',
+                articles_found=4,
+                articles_created=1,
+                triggered_by='manual',
+                attempt_count=1,
+                duration_seconds=3,
+            )
+        crawl_run = (
+            CrawlRun.objects
+            .filter(source=crawler_source, articles_found=4, articles_created=1, duplicate_count=1, filtered_count=1, error_count=1)
+            .order_by('id')
+            .first()
+        )
+        if crawl_run is None:
+            crawl_run = CrawlRun.objects.create(
+                source=crawler_source,
+                triggered_by='manual',
+                status='success',
+                started_at=now,
+                finished_at=now,
+                attempt_count=1,
+                articles_found=4,
+                articles_created=1,
+                duplicate_count=1,
+                filtered_count=1,
+                error_count=1,
+                duration_seconds=3,
+            )
+        for item in [
+            {
+                'post': published_with_summary,
+                'item_status': 'created',
+                'source_url': 'https://example.com/e2e-created',
+                'normalized_url': 'https://example.com/e2e-created',
+                'title': 'E2E Created Crawl Item',
+                'error_message': '',
+                'payload': {'title': 'E2E Created Crawl Item'},
+            },
+            {
+                'post': None,
+                'item_status': 'duplicate',
+                'source_url': 'https://example.com/e2e-duplicate',
+                'normalized_url': 'https://example.com/e2e-duplicate',
+                'title': 'E2E Duplicate Crawl Item',
+                'error_message': 'Duplicate source URL',
+                'payload': {'title': 'E2E Duplicate Crawl Item'},
+            },
+            {
+                'post': None,
+                'item_status': 'filtered',
+                'source_url': '',
+                'normalized_url': '',
+                'title': 'E2E Filtered Crawl Item',
+                'error_message': 'Missing source URL',
+                'payload': {'title': 'E2E Filtered Crawl Item'},
+            },
+            {
+                'post': None,
+                'item_status': 'error',
+                'source_url': 'https://example.com/e2e-error',
+                'normalized_url': 'https://example.com/e2e-error',
+                'title': 'E2E Error Crawl Item',
+                'error_message': 'Item persistence failed',
+                'payload': {'title': 'E2E Error Crawl Item'},
+            },
+        ]:
+            CrawlItem.objects.update_or_create(
+                run=crawl_run,
+                title=item['title'],
+                defaults=item,
+            )
 
         self.stdout.write(self.style.SUCCESS('E2E seed data prepared.'))

@@ -445,14 +445,17 @@ P1 시작 조건:
 - `높음`
 
 ### P4-2. Crawl Run 상세 드릴다운
-- [ ] run 목록/상세 조회 프론트 API 추가
-- [ ] source 카드에서 최신 run 상세로 이동
-- [ ] run 단위 결과 요약 표시
-- [ ] item 단위 created/duplicate/filtered/error 결과 표시
-- [ ] created item은 생성된 post로 연결
+- [x] run 목록/상세 조회 프론트 API 추가
+- [x] source 카드에서 최신 run 상세로 이동
+- [x] run 단위 결과 요약 표시
+- [x] item 단위 created/duplicate/filtered/error 결과 표시
+- [x] created item은 생성된 post로 연결
 
 우선순위:
 - `최상`
+
+구현 문서:
+- [p4-2-crawl-run-drilldown-implementation.md](/C:/project/Codex/Crawler/docs/p4-2-crawl-run-drilldown-implementation.md)
 
 ### P4-3. 크롤러 결과 진단 개선
 - [ ] 운영자용 오류 카테고리 정리
@@ -471,10 +474,10 @@ P1 시작 조건:
 - `중상`
 
 ### P4-5. 크롤러 운영 E2E 보강
-- [ ] crawler source/run/item seed 보강
+- [x] crawler source/run/item seed 보강
 - [ ] 운영 화면 필터/정렬 E2E 추가
-- [ ] run 상세 드릴다운 E2E 추가
-- [ ] created item post link E2E 추가
+- [x] run 상세 드릴다운 E2E 추가
+- [x] created item post link E2E 추가
 
 우선순위:
 - `중상`
@@ -486,7 +489,8 @@ P1 시작 조건:
 - [x] `P3-4 자동화 테스트 실행 스크립트/CI 기준선` 완료
 - [x] `P3-5 프론트 대형 화면 추가 분해` 완료
 - [x] `P3-6 인증 구조 고도화 검토` 완료
-- [ ] `P4-2 Crawl Run 상세 드릴다운` 착수
+- [x] `P4-2 Crawl Run 상세 드릴다운` 완료
+- [ ] `P4-1 크롤러 운영 화면 개선` 착수
 - [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료

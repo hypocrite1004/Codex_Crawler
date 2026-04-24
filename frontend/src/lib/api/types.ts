@@ -266,6 +266,37 @@ export interface CrawlerLog {
     crawled_at: string;
 }
 
+export interface CrawlerRun {
+    id: number;
+    source: number;
+    source_name: string;
+    triggered_by: 'manual' | 'scheduled';
+    status: 'running' | 'success' | 'playwright_fallback' | 'error';
+    started_at: string;
+    finished_at: string | null;
+    attempt_count: number;
+    articles_found: number;
+    articles_created: number;
+    duplicate_count: number;
+    filtered_count: number;
+    error_count: number;
+    duration_seconds: number;
+    error_message: string;
+    item_count: number;
+}
+
+export interface CrawlItem {
+    id: number;
+    item_status: 'created' | 'duplicate' | 'filtered' | 'error';
+    source_url: string;
+    normalized_url: string;
+    title: string;
+    error_message: string;
+    payload: Record<string, unknown>;
+    post_id: number | null;
+    created_at: string;
+}
+
 export interface CrawlerPreviewItem {
     title: string;
     url: string;

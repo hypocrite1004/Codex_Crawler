@@ -41,21 +41,24 @@ Acceptance criteria:
 
 ## P4-2. Crawl Run Detail Drilldown
 
-Status: planned
+Status: completed
 
 Objective:
 - Let an admin inspect an execution record without guessing from a toast or compact log row.
 
 Scope:
-- Add frontend API functions for crawler runs and run items.
-- Add a run detail panel or route from the crawler page.
-- Show run status, trigger, duration, attempts, found, created, duplicate, filtered, error counts.
-- Show item-level table grouped by `created`, `duplicate`, `filtered`, and `error`.
+- Added frontend API functions for crawler runs and run items.
+- Added a run detail panel on the crawler page.
+- Shows run status, trigger, duration, attempts, found, created, duplicate, filtered, error counts.
+- Shows item-level outcomes grouped by `created`, `duplicate`, `filtered`, and `error`.
 
 Acceptance criteria:
-- After manual crawl, the operator can open the latest run directly.
-- A failed run shows its run-level error and item-level errors when available.
-- Created items link to the generated post when `post_id` exists.
+- Completed: after manual crawl, the operator can open the latest run directly when `run_id` is returned.
+- Completed: failed runs and failed items have visible error messages when available.
+- Completed: created items link to the generated post when `post_id` exists.
+
+Implementation record:
+- [p4-2-crawl-run-drilldown-implementation.md](/C:/project/Codex/Crawler/docs/p4-2-crawl-run-drilldown-implementation.md)
 
 ## P4-3. Crawler Result Diagnostics
 

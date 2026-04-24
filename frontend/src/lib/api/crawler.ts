@@ -1,5 +1,5 @@
 import { API_URL, fetchWithAuth, getHeaders, logout } from './core';
-import type { CrawlerLog, CrawlerPreviewItem, CrawlerSource } from './types';
+import type { CrawlItem, CrawlerLog, CrawlerPreviewItem, CrawlerRun, CrawlerSource } from './types';
 
 export async function fetchCrawlerSources(): Promise<CrawlerSource[]> {
     try {
@@ -54,6 +54,7 @@ export async function runCrawl(id: number): Promise<{
     error: string;
     attempt_count: number;
     duration_seconds: number;
+    run_id: number | null;
 }> {
     const res = await fetchWithAuth(`${API_URL}/crawler-sources/${id}/crawl/`, {
         method: 'POST',
@@ -67,6 +68,19 @@ export async function runCrawl(id: number): Promise<{
 export async function fetchCrawlerLogs(id: number): Promise<CrawlerLog[]> {
     const res = await fetchWithAuth(`${API_URL}/crawler-sources/${id}/logs/`, { headers: getHeaders() });
     if (!res.ok) throw new Error('Failed to fetch logs');
+    return res.json();
+}
+
+export async function fetchCrawlerRuns(sourceId?: number): Promise<CrawlerRun[]> {
+    const query = sourceId ? `?source=${sourceId}` : '';
+    const res = await fetchWithAuth(`${API_URL}/crawler-runs/${query}`, { headers: getHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch crawler runs');
+    return res.json();
+}
+
+export async function fetchCrawlerRunItems(runId: number): Promise<CrawlItem[]> {
+    const res = await fetchWithAuth(`${API_URL}/crawler-runs/${runId}/items/`, { headers: getHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch crawler run items');
     return res.json();
 }
 
