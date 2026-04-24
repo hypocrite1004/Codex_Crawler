@@ -559,6 +559,58 @@ P1 시작 조건:
 구현 문서:
 - [p5-5-crawler-reliability-test-expansion.md](/C:/project/Codex/Crawler/docs/p5-5-crawler-reliability-test-expansion.md)
 
+## P6. Content Intelligence and Discovery
+
+목표:
+- 일반 방문자가 수집된 보안 콘텐츠를 빠르게 이해하고, 관련 CVE/IOC/키워드/유사 글로 탐색을 이어갈 수 있게 합니다.
+
+방향:
+- 제품성을 우선합니다.
+- 수집 정확도 개선은 공개 사용자 이해/탐색 가치를 막는 병목에 한해 함께 진행합니다.
+
+계획 문서:
+- [p6-content-intelligence-discovery-plan.md](/C:/project/Codex/Crawler/docs/p6-content-intelligence-discovery-plan.md)
+
+### P6-1. 공개 글 목록 탐색 UX 개선
+- [ ] 공개 글 카드에 보안 맥락 신호 표시
+- [ ] CVE/IOC/요약/관련 글 여부를 탐색 단서로 활용
+- [ ] 기존 공개 목록 동작 회귀 방지
+
+우선순위:
+- `높음`
+
+### P6-2. 글 상세 이해 카드 추가
+- [ ] 요약/CVE/IOC/source/published metadata를 상단 이해 카드로 정리
+- [ ] enriched metadata가 부족한 글의 graceful fallback 처리
+- [ ] 공개 사용자 기준으로 내부 운영 정보 노출 방지
+
+우선순위:
+- `높음`
+
+### P6-3. CVE/IOC/키워드 기반 탐색 연결
+- [ ] CVE mention을 CVE 상세 또는 관련 흐름으로 연결
+- [ ] IOC/키워드 기반 탐색 경로 검토
+- [ ] 관련 글 탐색 경로 개선
+
+우선순위:
+- `중상`
+
+### P6-4. 공개 콘텐츠 품질 신호
+- [ ] source/date/summary availability/related count/CVE count 등 public-safe 신호 정리
+- [ ] 내부 crawler diagnostics는 admin-only로 유지
+- [ ] 방문자가 읽을 가치 판단을 빠르게 할 수 있게 표시
+
+우선순위:
+- `중상`
+
+### P6-5. 공개 사용자 E2E 보강
+- [ ] P6 seed data 보강
+- [ ] list-to-detail 이해 흐름 E2E 추가
+- [ ] CVE 또는 related-content 탐색 E2E 추가
+
+우선순위:
+- `중상`
+
 ## 다음 액션
 - [x] `P3-1 Playwright 기반 핵심 E2E 자동화 구현` 완료
 - [x] `P3-2 backend/api/crawler.py 내부 분해` 완료
@@ -576,6 +628,7 @@ P1 시작 조건:
 - [x] `P5-3 재시도/auto-disable 정책 고도화` 완료
 - [x] `P5-4 운영 경보` 완료
 - [x] `P5-5 안정성 테스트 보강` 완료
+- [ ] `P6-1 공개 글 목록 탐색 UX 개선` 착수
 - [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료
