@@ -426,6 +426,59 @@ P1 시작 조건:
 우선순위:
 - `중간`
 
+## P4. 크롤러 관측성 및 운영 사용성 개선
+
+목표:
+- 크롤러가 정확히 동작했는지 확인 가능해야 함
+- 문제가 생겼을 때 원인을 관리자 화면에서 추적 가능해야 함
+- 수집 현황을 실행 단위와 기간 단위로 파악 가능해야 함
+
+기준 문서:
+- [p4-crawler-observability-usability-plan.md](/C:/project/Codex/Crawler/docs/p4-crawler-observability-usability-plan.md)
+
+### P4-1. 크롤러 운영 화면 개선
+- [ ] 상단 수집/상태 요약 강화
+- [ ] health/source type/active/search 필터 추가
+- [ ] attention/due/latest run 기준 정렬
+
+우선순위:
+- `높음`
+
+### P4-2. Crawl Run 상세 드릴다운
+- [ ] run 목록/상세 조회 프론트 API 추가
+- [ ] source 카드에서 최신 run 상세로 이동
+- [ ] run 단위 결과 요약 표시
+- [ ] item 단위 created/duplicate/filtered/error 결과 표시
+- [ ] created item은 생성된 post로 연결
+
+우선순위:
+- `최상`
+
+### P4-3. 크롤러 결과 진단 개선
+- [ ] 운영자용 오류 카테고리 정리
+- [ ] 네트워크/보안 차단/selector mismatch/중복/필터링/저장 실패 구분
+- [ ] run/item 상세 화면에서 원인 확인 가능하게 정리
+
+우선순위:
+- `높음`
+
+### P4-4. 수집 현황 메트릭
+- [ ] 24h/7d run status 요약
+- [ ] created/duplicate/filtered/error item 요약
+- [ ] source별 최근 성공률 또는 실패 추세 표시
+
+우선순위:
+- `중상`
+
+### P4-5. 크롤러 운영 E2E 보강
+- [ ] crawler source/run/item seed 보강
+- [ ] 운영 화면 필터/정렬 E2E 추가
+- [ ] run 상세 드릴다운 E2E 추가
+- [ ] created item post link E2E 추가
+
+우선순위:
+- `중상`
+
 ## 다음 액션
 - [x] `P3-1 Playwright 기반 핵심 E2E 자동화 구현` 완료
 - [x] `P3-2 backend/api/crawler.py 내부 분해` 완료
@@ -433,6 +486,7 @@ P1 시작 조건:
 - [x] `P3-4 자동화 테스트 실행 스크립트/CI 기준선` 완료
 - [x] `P3-5 프론트 대형 화면 추가 분해` 완료
 - [x] `P3-6 인증 구조 고도화 검토` 완료
+- [ ] `P4-2 Crawl Run 상세 드릴다운` 착수
 - [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료
