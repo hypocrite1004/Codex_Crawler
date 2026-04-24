@@ -175,12 +175,12 @@ def _persist_crawled_items_with_run(source, items: list[dict], system_user, get_
     for item in items:
         url = item.get('url', '').strip()
         normalized_url = normalize_source_url(url)
-        if not url:
-            result['filtered_count'] += 1
-            record_item_fn(crawl_run, 'filtered', item, error_message='Missing source URL')
-            continue
-
         try:
+            if not url:
+                record_item_fn(crawl_run, 'filtered', item, error_message='Missing source URL')
+                result['filtered_count'] += 1
+                continue
+
             duplicate_detected = False
             new_post = None
             with transaction.atomic():
@@ -221,14 +221,14 @@ def _persist_crawled_items_with_run(source, items: list[dict], system_user, get_
                     record_item_fn(crawl_run, 'created', item, post=new_post)
 
             if duplicate_detected:
-                result['duplicate_count'] += 1
                 record_item_fn(crawl_run, 'duplicate', item, error_message='Duplicate source URL')
+                result['duplicate_count'] += 1
             elif new_post is not None:
                 result['created'] += 1
         except IntegrityError:
             if Post.objects.filter(models.Q(normalized_source_url=normalized_url) | models.Q(source_url=url)).exists():
-                result['duplicate_count'] += 1
                 record_item_fn(crawl_run, 'duplicate', item, error_message='Duplicate source URL')
+                result['duplicate_count'] += 1
                 continue
             raise
         except Exception as exc:

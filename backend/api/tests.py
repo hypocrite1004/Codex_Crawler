@@ -521,6 +521,49 @@ class CrawlRunTrackingTests(APITestCase):
         self.assertEqual(crawl_run.error_count, 1)
         self.assertTrue(CrawlItem.objects.filter(run=crawl_run, item_status='error').exists())
 
+    @patch('api.crawler._send_telegram_notifications')
+    @patch('api.embeddings.get_embedding', return_value=None)
+    @patch('api.crawler._record_crawl_item')
+    @patch('api.crawler.crawl_rss')
+    def test_run_summary_uses_recorded_items_when_duplicate_recording_fails(
+        self,
+        mock_crawl_rss,
+        mock_record_crawl_item,
+        _mock_embedding,
+        _mock_notify,
+    ):
+        Post.objects.create(
+            title='Existing Duplicate',
+            content='existing content',
+            source_url='https://example.com/duplicate-record-failure',
+            normalized_source_url='https://example.com/duplicate-record-failure',
+            author=self.user,
+        )
+        mock_crawl_rss.return_value = ([{
+            'url': 'https://example.com/duplicate-record-failure',
+            'title': 'Duplicate Record Failure',
+            'content': 'duplicate content',
+        }], 'success')
+
+        def record_side_effect(run, item_status, item, post=None, error_message=''):
+            if item_status == 'duplicate':
+                raise RuntimeError('duplicate item write failed')
+            return ACTUAL_RECORD_CRAWL_ITEM(run, item_status, item, post=post, error_message=error_message)
+
+        mock_record_crawl_item.side_effect = record_side_effect
+
+        result = run_crawl(self.source, triggered_by='manual')
+
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['created'], 0)
+        crawl_run = CrawlRun.objects.get(id=result['run_id'])
+        self.assertEqual(crawl_run.articles_found, 1)
+        self.assertEqual(crawl_run.articles_created, 0)
+        self.assertEqual(crawl_run.duplicate_count, 0)
+        self.assertEqual(crawl_run.filtered_count, 0)
+        self.assertEqual(crawl_run.error_count, 1)
+        self.assertEqual(list(crawl_run.items.values_list('item_status', flat=True)), ['error'])
+
     def test_run_crawl_returns_running_when_source_is_locked(self):
         self.source.is_running = True
         self.source.last_run_started_at = timezone.now()

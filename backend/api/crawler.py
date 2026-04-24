@@ -205,8 +205,9 @@ def run_crawl(source, triggered_by: str = 'manual') -> dict:
 
                 found = len(items)
                 system_user = _ensure_system_user()
-                persist_result = _persist_crawled_items_with_run(source, items, system_user, get_embedding, crawl_run)
-                created = persist_result['created']
+                _persist_crawled_items_with_run(source, items, system_user, get_embedding, crawl_run)
+                item_totals = _get_run_item_totals(crawl_run)
+                created = item_totals['created']
 
                 finished_at = timezone.now()
                 duration_seconds = max(0, int(time.monotonic() - started_at))
@@ -232,9 +233,9 @@ def run_crawl(source, triggered_by: str = 'manual') -> dict:
                 crawl_run.attempt_count = attempt_count
                 crawl_run.articles_found = found
                 crawl_run.articles_created = created
-                crawl_run.duplicate_count = persist_result['duplicate_count']
-                crawl_run.filtered_count = persist_result['filtered_count']
-                crawl_run.error_count = persist_result['error_count']
+                crawl_run.duplicate_count = item_totals['duplicate_count']
+                crawl_run.filtered_count = item_totals['filtered_count']
+                crawl_run.error_count = item_totals['error_count']
                 crawl_run.duration_seconds = duration_seconds
                 crawl_run.error_message = ''
                 crawl_run.save(update_fields=[
@@ -321,11 +322,12 @@ def run_crawl(source, triggered_by: str = 'manual') -> dict:
         )
 
         item_totals = _get_run_item_totals(crawl_run)
+        created = item_totals['created']
         crawl_run.status = 'error'
         crawl_run.finished_at = finished_at
         crawl_run.attempt_count = attempt_count
         crawl_run.articles_found = found or sum(item_totals.values())
-        crawl_run.articles_created = item_totals['created'] or created
+        crawl_run.articles_created = created
         crawl_run.duplicate_count = item_totals['duplicate_count']
         crawl_run.filtered_count = item_totals['filtered_count']
         crawl_run.error_count = item_totals['error_count']

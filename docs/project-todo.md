@@ -514,12 +514,15 @@ P1 시작 조건:
 - [p5-1-crawler-lock-state-recovery-implementation.md](/C:/project/Codex/Crawler/docs/p5-1-crawler-lock-state-recovery-implementation.md)
 
 ### P5-2. 저장 일관성 검증
-- [ ] run summary count와 `CrawlItem` evidence 일치 검증 강화
-- [ ] mixed created/duplicate/filtered/error 처리 회귀 테스트 확대
-- [ ] item-level evidence를 run summary source of truth로 정리
+- [x] run summary count와 `CrawlItem` evidence 일치 검증 강화
+- [x] mixed created/duplicate/filtered/error 처리 회귀 테스트 확대
+- [x] item-level evidence를 run summary source of truth로 정리
 
 우선순위:
 - `높음`
+
+구현 문서:
+- [p5-2-crawler-persistence-consistency-implementation.md](/C:/project/Codex/Crawler/docs/p5-2-crawler-persistence-consistency-implementation.md)
 
 ### P5-3. 재시도/auto-disable 정책 고도화
 - [ ] retryable/non-retryable 실패 유형 정리
@@ -560,7 +563,8 @@ P1 시작 조건:
 - [x] `P4-4 수집 현황 메트릭` 완료
 - [x] `P4-5 크롤러 운영 E2E 보강` 완료
 - [x] `P5-1 실행 lock/상태 복구` 완료
-- [ ] `P5-2 저장 일관성 검증` 착수
+- [x] `P5-2 저장 일관성 검증` 완료
+- [ ] `P5-3 재시도/auto-disable 정책 고도화` 착수
 - [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료

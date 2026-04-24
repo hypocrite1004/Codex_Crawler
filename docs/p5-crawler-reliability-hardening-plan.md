@@ -28,15 +28,23 @@ Implementation record:
 
 ## P5-2. Persistence Consistency Guardrails
 
-Status: planned
+Status: completed
 
 Objective:
 - Ensure run summary counts remain aligned with actual `CrawlItem` evidence when item processing partially fails.
 
 Scope:
-- Add consistency checks for `articles_created`, `duplicate_count`, `filtered_count`, and `error_count`.
-- Expand tests around mixed created/duplicate/filtered/error outcomes.
-- Keep item-level evidence as the source of truth for run summaries.
+- Added consistency checks for `articles_created`, `duplicate_count`, `filtered_count`, and `error_count`.
+- Expanded tests around partial item evidence recording failures.
+- Kept item-level evidence as the source of truth for run summaries.
+
+Acceptance criteria:
+- Completed: run summary counts are derived from recorded `CrawlItem` evidence.
+- Completed: duplicate item recording failure does not leave duplicate counts without duplicate evidence.
+- Completed: missing URL item handling uses the same per-item exception boundary as other outcomes.
+
+Implementation record:
+- [p5-2-crawler-persistence-consistency-implementation.md](/C:/project/Codex/Crawler/docs/p5-2-crawler-persistence-consistency-implementation.md)
 
 ## P5-3. Retry and Auto-disable Policy Hardening
 
