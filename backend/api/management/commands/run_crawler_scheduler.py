@@ -3,7 +3,7 @@ import time
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from api.crawler import run_crawl
+from api.crawler import recover_stale_crawler_state, run_crawl
 from api.models import CrawlerSource
 
 
@@ -48,6 +48,10 @@ class Command(BaseCommand):
 
     def run_due_sources(self, limit: int = 0) -> int:
         now = timezone.now()
+        recovered = recover_stale_crawler_state(now=now)
+        if recovered:
+            self.stdout.write(self.style.WARNING(f'고착된 크롤러 실행 상태 {recovered}개를 복구했습니다.'))
+
         queryset = CrawlerSource.objects.filter(is_active=True).order_by('last_crawled_at', 'created_at')
         processed = 0
 

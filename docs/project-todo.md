@@ -492,6 +492,61 @@ P1 시작 조건:
 우선순위:
 - `중상`
 
+## P5. 크롤러 안정성 하드닝
+
+목표:
+- 크롤러가 실패하거나 중단되어도 상태가 고착되지 않고, 저장 결과가 일관되며, 운영자가 장애 징후를 조기에 확인할 수 있게 합니다.
+
+계획 문서:
+- [p5-crawler-reliability-hardening-plan.md](/C:/project/Codex/Crawler/docs/p5-crawler-reliability-hardening-plan.md)
+
+### P5-1. 실행 lock/상태 복구
+- [x] stale `is_running` lock 복구
+- [x] 고착된 `CrawlRun(status='running')` 실패 처리
+- [x] scheduler due-source 판단 전 stale 상태 복구
+- [x] fresh lock 중복 실행 방지 회귀 테스트
+- [x] stale lock 복구 회귀 테스트
+
+우선순위:
+- `최상`
+
+구현 문서:
+- [p5-1-crawler-lock-state-recovery-implementation.md](/C:/project/Codex/Crawler/docs/p5-1-crawler-lock-state-recovery-implementation.md)
+
+### P5-2. 저장 일관성 검증
+- [ ] run summary count와 `CrawlItem` evidence 일치 검증 강화
+- [ ] mixed created/duplicate/filtered/error 처리 회귀 테스트 확대
+- [ ] item-level evidence를 run summary source of truth로 정리
+
+우선순위:
+- `높음`
+
+### P5-3. 재시도/auto-disable 정책 고도화
+- [ ] retryable/non-retryable 실패 유형 정리
+- [ ] blocked config/selector mismatch 반복 재시도 억제
+- [ ] auto-disable 원인과 복구 흐름 운영 화면에서 확인 가능하게 정리
+
+우선순위:
+- `중상`
+
+### P5-4. 운영 경보
+- [ ] 오래 지속되는 running 상태 경고
+- [ ] 최근 실패율 급증 source 표시
+- [ ] 장기간 성공 run 없는 source 표시
+- [ ] item error rate 높은 source 표시
+
+우선순위:
+- `중상`
+
+### P5-5. 안정성 테스트 보강
+- [ ] stale lock recovery 테스트 확대
+- [ ] run count consistency 테스트 확대
+- [ ] retry/auto-disable 정책 테스트 추가
+- [ ] P5-4 UI 변경 시 E2E 보강
+
+우선순위:
+- `중상`
+
 ## 다음 액션
 - [x] `P3-1 Playwright 기반 핵심 E2E 자동화 구현` 완료
 - [x] `P3-2 backend/api/crawler.py 내부 분해` 완료
@@ -504,6 +559,8 @@ P1 시작 조건:
 - [x] `P4-3 크롤러 결과 진단 개선` 완료
 - [x] `P4-4 수집 현황 메트릭` 완료
 - [x] `P4-5 크롤러 운영 E2E 보강` 완료
+- [x] `P5-1 실행 lock/상태 복구` 완료
+- [ ] `P5-2 저장 일관성 검증` 착수
 - [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료

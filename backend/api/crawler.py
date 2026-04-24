@@ -1,6 +1,8 @@
 import logging
 import time
+from datetime import timedelta
 
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -15,6 +17,8 @@ logger = logging.getLogger(__name__)
 _ensure_system_user = persistence._ensure_system_user
 _get_run_item_totals = persistence._get_run_item_totals
 normalize_source_url = persistence.normalize_source_url
+
+STALE_RUN_RECOVERY_MESSAGE = 'Crawler run exceeded stale lock timeout and was recovered.'
 
 
 def _record_crawl_item(run, item_status: str, item: dict, post=None, error_message: str = ''):
@@ -43,9 +47,107 @@ def _persist_crawled_items_with_run(source, items: list[dict], system_user, get_
     )
 
 
+def _stale_run_cutoff(now=None):
+    now = now or timezone.now()
+    timeout_minutes = max(10, int(getattr(settings, 'CRAWLER_STALE_RUN_MINUTES', 120)))
+    return now - timedelta(minutes=timeout_minutes)
+
+
+def recover_stale_crawler_state(source=None, now=None) -> int:
+    from .models import CrawlerLog, CrawlerSource, CrawlRun
+
+    now = now or timezone.now()
+    cutoff = _stale_run_cutoff(now)
+    queryset = CrawlerSource.objects.filter(is_running=True).filter(
+        models.Q(last_run_started_at__lt=cutoff) | models.Q(last_run_started_at__isnull=True)
+    )
+    if source is not None:
+        queryset = queryset.filter(pk=source.pk)
+
+    recovered = 0
+    for stale_source in queryset:
+        running_runs = list(CrawlRun.objects.filter(
+            source=stale_source,
+            status='running',
+            finished_at__isnull=True,
+        ))
+        run_totals = {'created': 0, 'duplicate_count': 0, 'filtered_count': 0, 'error_count': 0}
+        for crawl_run in running_runs:
+            item_totals = _get_run_item_totals(crawl_run)
+            run_totals['created'] += item_totals['created']
+            run_totals['duplicate_count'] += item_totals['duplicate_count']
+            run_totals['filtered_count'] += item_totals['filtered_count']
+            run_totals['error_count'] += item_totals['error_count']
+            crawl_run.status = 'error'
+            crawl_run.finished_at = now
+            crawl_run.articles_created = item_totals['created']
+            crawl_run.duplicate_count = item_totals['duplicate_count']
+            crawl_run.filtered_count = item_totals['filtered_count']
+            crawl_run.error_count = item_totals['error_count']
+            crawl_run.duration_seconds = max(0, int((now - crawl_run.started_at).total_seconds()))
+            crawl_run.error_message = STALE_RUN_RECOVERY_MESSAGE
+            crawl_run.save(update_fields=[
+                'status',
+                'finished_at',
+                'articles_created',
+                'duplicate_count',
+                'filtered_count',
+                'error_count',
+                'duration_seconds',
+                'error_message',
+            ])
+
+        stale_source.last_crawled_at = now
+        stale_source.last_status = 'error'
+        stale_source.last_error_message = STALE_RUN_RECOVERY_MESSAGE
+        stale_source.consecutive_failures = (stale_source.consecutive_failures or 0) + 1
+        auto_disabled = bool(
+            stale_source.auto_disable_after_failures
+            and stale_source.consecutive_failures >= stale_source.auto_disable_after_failures
+        )
+        if auto_disabled:
+            stale_source.is_active = False
+        stale_source.is_running = False
+        stale_source.save(update_fields=[
+            'last_crawled_at',
+            'last_status',
+            'last_error_message',
+            'consecutive_failures',
+            'is_active',
+            'is_running',
+        ])
+
+        CrawlerLog.objects.create(
+            source=stale_source,
+            status='error',
+            articles_found=sum(run_totals.values()),
+            articles_created=run_totals['created'],
+            error_message=STALE_RUN_RECOVERY_MESSAGE,
+            triggered_by=running_runs[0].triggered_by if running_runs else 'scheduled',
+            attempt_count=0,
+            duration_seconds=max(0, int((now - stale_source.last_run_started_at).total_seconds())) if stale_source.last_run_started_at else 0,
+        )
+        recovered += 1
+
+    return recovered
+
+
 def run_crawl(source, triggered_by: str = 'manual') -> dict:
     from .embeddings import get_embedding
     from .models import CrawlerLog, CrawlRun
+
+    recover_stale_crawler_state(source=source)
+    source.refresh_from_db()
+    if not source.is_active:
+        return {
+            'created': 0,
+            'found': 0,
+            'status': 'error',
+            'error': 'Source is inactive.',
+            'attempt_count': 0,
+            'duration_seconds': 0,
+            'run_id': None,
+        }
 
     try:
         validate_crawler_request_config(source)

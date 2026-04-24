@@ -1,14 +1,17 @@
 import json
+from datetime import timedelta
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.db import IntegrityError
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from . import crawler as crawler_module
+from .management.commands.run_crawler_scheduler import Command as CrawlerSchedulerCommand
 from .cve_sync import sync_post_cve_mentions
 from .crawler import run_crawl
 from .models import AIConfig, CrawlItem, CrawlRun, CrawlerSource, CrawlerLog, Post, Category, Comment, CveRecord, PostCveMention
@@ -520,7 +523,8 @@ class CrawlRunTrackingTests(APITestCase):
 
     def test_run_crawl_returns_running_when_source_is_locked(self):
         self.source.is_running = True
-        self.source.save(update_fields=['is_running'])
+        self.source.last_run_started_at = timezone.now()
+        self.source.save(update_fields=['is_running', 'last_run_started_at'])
 
         result = run_crawl(self.source, triggered_by='scheduled')
 
@@ -528,6 +532,72 @@ class CrawlRunTrackingTests(APITestCase):
         self.assertEqual(result['attempt_count'], 0)
         self.assertIsNone(result['run_id'])
         self.assertEqual(CrawlRun.objects.count(), 0)
+
+    @override_settings(CRAWLER_STALE_RUN_MINUTES=60)
+    @patch('api.crawler._send_telegram_notifications')
+    @patch('api.embeddings.get_embedding', return_value=None)
+    @patch('api.crawler.crawl_rss')
+    def test_run_crawl_recovers_stale_lock_before_starting_new_run(self, mock_crawl_rss, _mock_embedding, _mock_notify):
+        stale_started_at = timezone.now() - timedelta(hours=2)
+        self.source.is_running = True
+        self.source.last_run_started_at = stale_started_at
+        self.source.save(update_fields=['is_running', 'last_run_started_at'])
+        stale_run = CrawlRun.objects.create(
+            source=self.source,
+            triggered_by='manual',
+            status='running',
+            started_at=stale_started_at,
+        )
+        mock_crawl_rss.return_value = ([{
+            'url': 'https://example.com/recovered',
+            'title': 'Recovered Crawl',
+            'content': 'content',
+        }], 'success')
+
+        result = run_crawl(self.source, triggered_by='manual')
+
+        self.assertEqual(result['status'], 'success')
+        self.assertNotEqual(result['run_id'], stale_run.id)
+        stale_run.refresh_from_db()
+        self.assertEqual(stale_run.status, 'error')
+        self.assertIn('stale lock timeout', stale_run.error_message)
+        self.assertGreater(stale_run.duration_seconds, 0)
+
+        self.source.refresh_from_db()
+        self.assertFalse(self.source.is_running)
+        self.assertEqual(self.source.consecutive_failures, 0)
+        self.assertEqual(CrawlerLog.objects.filter(source=self.source, status='error').count(), 1)
+        self.assertEqual(CrawlerLog.objects.filter(source=self.source, status='success').count(), 1)
+
+    @override_settings(CRAWLER_STALE_RUN_MINUTES=60)
+    @patch('api.management.commands.run_crawler_scheduler.run_crawl', return_value={
+        'status': 'success',
+        'created': 0,
+        'found': 0,
+        'attempt_count': 1,
+    })
+    def test_scheduler_recovers_stale_locks_before_due_check(self, mock_run_crawl):
+        stale_started_at = timezone.now() - timedelta(hours=2)
+        self.source.is_running = True
+        self.source.last_run_started_at = stale_started_at
+        self.source.last_crawled_at = timezone.now() - timedelta(days=1)
+        self.source.save(update_fields=['is_running', 'last_run_started_at', 'last_crawled_at'])
+        stale_run = CrawlRun.objects.create(
+            source=self.source,
+            triggered_by='scheduled',
+            status='running',
+            started_at=stale_started_at,
+        )
+
+        processed = CrawlerSchedulerCommand().run_due_sources(limit=1)
+
+        self.assertEqual(processed, 0)
+        mock_run_crawl.assert_not_called()
+        stale_run.refresh_from_db()
+        self.assertEqual(stale_run.status, 'error')
+        self.source.refresh_from_db()
+        self.assertFalse(self.source.is_running)
+        self.assertEqual(self.source.last_status, 'error')
 
     @patch('api.crawler.time.sleep', return_value=None)
     @patch('api.crawler.crawl_rss', side_effect=ValueError('feed unavailable'))
