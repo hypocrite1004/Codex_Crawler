@@ -322,7 +322,55 @@ class CrawlRunTrackingTests(APITestCase):
         self.assertEqual(response.data['periods']['7d']['error_count'], 1)
         self.assertEqual(response.data['sources'][0]['source_id'], self.source.id)
         self.assertEqual(response.data['sources'][0]['recent_runs'], 2)
+        self.assertEqual(response.data['sources'][0]['quality']['quality_status'], 'ok')
         self.assertIn('alerts', response.data)
+        self.assertIn('quality', response.data)
+
+    def test_crawler_metrics_endpoint_returns_source_quality_summaries(self):
+        now = timezone.now()
+        crawl_run = CrawlRun.objects.create(
+            source=self.source,
+            triggered_by='manual',
+            status='success',
+            started_at=now,
+            finished_at=now,
+            articles_found=1,
+            articles_created=1,
+        )
+        bad_post = Post.objects.create(
+            title='(No title)',
+            content='',
+            source_url='https://example.com/low-quality',
+            normalized_source_url='https://example.com/low-quality',
+            site=self.source.name,
+            author=self.user,
+            status='published',
+        )
+        CrawlItem.objects.create(
+            run=crawl_run,
+            post=bad_post,
+            item_status='created',
+            source_url=bad_post.source_url,
+            normalized_url=bad_post.normalized_source_url,
+            title=bad_post.title,
+        )
+
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get('/api/crawler-runs/metrics/')
+
+        self.assertEqual(response.status_code, 200)
+        source_metric = response.data['sources'][0]
+        self.assertEqual(source_metric['source_id'], self.source.id)
+        self.assertEqual(source_metric['quality']['quality_status'], 'error')
+        self.assertEqual(source_metric['quality']['posts_checked'], 1)
+        self.assertEqual(source_metric['quality']['error_count'], 2)
+
+        issue_codes = {issue['code'] for issue in source_metric['quality']['issues']}
+        self.assertIn('missing_title', issue_codes)
+        self.assertIn('missing_content', issue_codes)
+
+        alert_categories = {alert['category'] for alert in response.data['alerts']}
+        self.assertIn('quality_error_findings', alert_categories)
 
     def test_crawler_metrics_endpoint_returns_reliability_alerts(self):
         now = timezone.now()

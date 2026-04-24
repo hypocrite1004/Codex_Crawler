@@ -344,7 +344,7 @@ function CollectionMetrics({ metrics }: { metrics: CrawlerMetrics | null }) {
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                     {metrics.sources.slice(0, 6).map((source) => (
-                        <div key={source.source_id} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) repeat(5, minmax(72px, auto))', gap: '0.7rem', alignItems: 'center', padding: '0.65rem 0.75rem', borderRadius: 8, background: 'rgba(0,0,0,0.18)', border: '1px solid var(--glass-border)' }}>
+                        <div key={source.source_id} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) repeat(6, minmax(72px, auto))', gap: '0.7rem', alignItems: 'center', padding: '0.65rem 0.75rem', borderRadius: 8, background: 'rgba(0,0,0,0.18)', border: '1px solid var(--glass-border)' }}>
                             <div style={{ minWidth: 0 }}>
                                 <div style={{ color: 'var(--text-primary)', fontSize: '0.82rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{source.source_name}</div>
                                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem' }}>last {fmt(source.last_run_at)}</div>
@@ -354,6 +354,7 @@ function CollectionMetrics({ metrics }: { metrics: CrawlerMetrics | null }) {
                             <MetricCell label="Failed" value={source.failed_runs} />
                             <MetricCell label="Created" value={source.articles_created} />
                             <MetricCell label="Errors" value={source.item_errors} />
+                            <QualityCell quality={source.quality} />
                         </div>
                     ))}
                 </div>
@@ -374,6 +375,26 @@ function CollectionMetric({ title, value, helper }: { title: string; value: numb
 
 function MetricCell({ label, value }: { label: string; value: number | string }) {
     return <div><div style={{ color: 'var(--text-secondary)', fontSize: '0.68rem' }}>{label}</div><div style={{ color: 'var(--text-primary)', fontSize: '0.78rem', fontWeight: 800 }}>{value}</div></div>;
+}
+
+function QualityCell({ quality }: { quality: CrawlerMetrics['sources'][number]['quality'] }) {
+    const tone = {
+        ok: '#86efac',
+        info: '#93c5fd',
+        warning: '#fde68a',
+        error: '#fca5a5',
+    }[quality.quality_status];
+    const issueCodes = quality.issues.slice(0, 2).map((issue) => issue.code).join(', ');
+    return (
+        <div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.68rem' }}>Quality</div>
+            <div style={{ color: tone, fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase' }}>{quality.quality_status}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.66rem' }}>
+                {quality.posts_checked ? `${quality.error_count}E ${quality.warning_count}W ${quality.info_count}I` : 'no posts'}
+            </div>
+            {issueCodes && <div style={{ color: 'var(--text-secondary)', fontSize: '0.62rem', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issueCodes}</div>}
+        </div>
+    );
 }
 
 export default function CrawlerSourcesPage() {

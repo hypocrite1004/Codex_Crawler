@@ -330,13 +330,33 @@ export interface CrawlerSourceMetric {
     articles_created: number;
     item_errors: number;
     last_run_at: string | null;
+    quality: CrawlerSourceQualityMetric;
+}
+
+export interface CrawlerQualityIssueMetric {
+    code: string;
+    severity: 'error' | 'warning' | 'info';
+    count: number;
+    message: string;
+}
+
+export interface CrawlerSourceQualityMetric {
+    source_id: number | null;
+    source_name: string;
+    posts_checked: number;
+    error_count: number;
+    warning_count: number;
+    info_count: number;
+    issue_count: number;
+    quality_status: 'ok' | 'info' | 'warning' | 'error';
+    issues: CrawlerQualityIssueMetric[];
 }
 
 export interface CrawlerReliabilityAlert {
     source_id: number;
     source_name: string;
     severity: 'warning' | 'error';
-    category: 'stale_running' | 'high_failure_rate' | 'no_recent_success' | 'high_item_error_rate';
+    category: 'stale_running' | 'high_failure_rate' | 'no_recent_success' | 'high_item_error_rate' | 'quality_error_findings' | 'quality_warning_findings';
     title: string;
     message: string;
 }
@@ -347,6 +367,10 @@ export interface CrawlerMetrics {
         '7d': CrawlerMetricPeriod;
     };
     sources: CrawlerSourceMetric[];
+    quality: {
+        posts_checked: number;
+        sources: CrawlerSourceQualityMetric[];
+    };
     alerts: CrawlerReliabilityAlert[];
 }
 

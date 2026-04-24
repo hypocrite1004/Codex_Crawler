@@ -7,8 +7,9 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from .crawler_quality import summarize_quality_by_source
 from .crawler_security import CrawlerSecurityError, validate_crawler_request_config
-from .models import CrawlerSource, CrawlRun
+from .models import CrawlerSource, CrawlRun, Post
 from .serializers import CrawlerLogSerializer, CrawlerSourceSerializer, CrawlItemSerializer, CrawlRunSerializer
 from .view_helpers import IsSuperUser
 
@@ -98,10 +99,12 @@ class CrawlerRunViewSet(viewsets.ReadOnlyModelViewSet):
             '7d': self._summarize_period(now - timedelta(days=7)),
         }
         since_7d = now - timedelta(days=7)
+        quality = self._summarize_quality_sources(since_7d)
         return Response({
             'periods': periods,
-            'sources': self._summarize_sources(since_7d),
-            'alerts': self._summarize_alerts(now, since_7d),
+            'sources': self._summarize_sources(since_7d, quality),
+            'quality': quality,
+            'alerts': self._summarize_alerts(now, since_7d, quality),
         })
 
     @action(detail=True, methods=['get'])
@@ -141,7 +144,12 @@ class CrawlerRunViewSet(viewsets.ReadOnlyModelViewSet):
             'duration_seconds': aggregate['duration_seconds'] or 0,
         }
 
-    def _summarize_sources(self, since):
+    def _summarize_sources(self, since, quality_summary=None):
+        quality_by_source = {
+            item['source_id']: item
+            for item in (quality_summary or {}).get('sources', [])
+            if item.get('source_id') is not None
+        }
         sources = (
             CrawlerSource.objects
             .annotate(
@@ -159,6 +167,7 @@ class CrawlerRunViewSet(viewsets.ReadOnlyModelViewSet):
         for source in sources:
             recent_runs = source.recent_runs or 0
             successful_runs = source.successful_runs or 0
+            quality = quality_by_source.get(source.id, self._empty_source_quality(source))
             result.append({
                 'source_id': source.id,
                 'source_name': source.name,
@@ -170,10 +179,35 @@ class CrawlerRunViewSet(viewsets.ReadOnlyModelViewSet):
                 'articles_created': source.articles_created or 0,
                 'item_errors': source.item_errors or 0,
                 'last_run_at': source.last_run_at.isoformat() if source.last_run_at else None,
+                'quality': quality,
             })
         return result
 
-    def _summarize_alerts(self, now, since):
+    def _summarize_quality_sources(self, since):
+        posts = (
+            Post.objects
+            .filter(created_at__gte=since, crawl_items__isnull=False)
+            .annotate(cve_count=Count('cve_mentions', distinct=True))
+            .prefetch_related('crawl_items__run__source')
+            .distinct()
+            .order_by('-created_at')
+        )
+        return summarize_quality_by_source(posts)
+
+    def _empty_source_quality(self, source):
+        return {
+            'source_id': source.id,
+            'source_name': source.name,
+            'posts_checked': 0,
+            'error_count': 0,
+            'warning_count': 0,
+            'info_count': 0,
+            'issue_count': 0,
+            'quality_status': 'ok',
+            'issues': [],
+        }
+
+    def _summarize_alerts(self, now, since, quality_summary=None):
         stale_cutoff = now - timedelta(minutes=max(10, int(getattr(settings, 'CRAWLER_STALE_RUN_MINUTES', 120))))
         sources = (
             CrawlerSource.objects
@@ -213,6 +247,26 @@ class CrawlerRunViewSet(viewsets.ReadOnlyModelViewSet):
 
             if item_total >= 4 and item_errors / item_total >= 0.25:
                 alerts.append(self._alert(source, 'warning', 'high_item_error_rate', 'High item error rate', f'{item_errors}/{item_total} recorded items failed in the last 7 days.'))
+
+        for quality in (quality_summary or {}).get('sources', []):
+            if quality['error_count']:
+                alerts.append({
+                    'source_id': quality['source_id'],
+                    'source_name': quality['source_name'],
+                    'severity': 'error',
+                    'category': 'quality_error_findings',
+                    'title': 'Stored content quality errors',
+                    'message': f"{quality['error_count']} error issue(s) across {quality['posts_checked']} recent post(s).",
+                })
+            elif quality['warning_count']:
+                alerts.append({
+                    'source_id': quality['source_id'],
+                    'source_name': quality['source_name'],
+                    'severity': 'warning',
+                    'category': 'quality_warning_findings',
+                    'title': 'Stored content quality warnings',
+                    'message': f"{quality['warning_count']} warning issue(s) across {quality['posts_checked']} recent post(s).",
+                })
 
         severity_order = {'error': 0, 'warning': 1}
         return sorted(alerts, key=lambda alert: (severity_order.get(alert['severity'], 2), alert['source_name'], alert['category']))[:12]

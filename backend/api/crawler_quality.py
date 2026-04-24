@@ -94,3 +94,84 @@ def summarize_quality(posts: Iterable) -> dict:
         summary['posts'].append(post_record)
 
     return summary
+
+
+def summarize_quality_by_source(posts: Iterable) -> dict:
+    summary = {
+        'posts_checked': 0,
+        'sources': [],
+    }
+    sources: dict[tuple[int | None, str], dict] = {}
+
+    for post in posts:
+        source = _post_crawler_source(post)
+        if source is None:
+            continue
+
+        summary['posts_checked'] += 1
+        source_id, source_name = source
+        source_summary = sources.setdefault(
+            (source_id, source_name),
+            {
+                'source_id': source_id,
+                'source_name': source_name,
+                'posts_checked': 0,
+                'error_count': 0,
+                'warning_count': 0,
+                'info_count': 0,
+                'issues': {},
+            },
+        )
+        source_summary['posts_checked'] += 1
+
+        for issue in analyze_post_quality(post):
+            source_summary[f'{issue.severity}_count'] += 1
+            issue_summary = source_summary['issues'].setdefault(
+                issue.code,
+                {'code': issue.code, 'severity': issue.severity, 'count': 0, 'message': issue.message},
+            )
+            issue_summary['count'] += 1
+
+    for source_summary in sources.values():
+        if source_summary['error_count']:
+            quality_status = 'error'
+        elif source_summary['warning_count']:
+            quality_status = 'warning'
+        elif source_summary['info_count']:
+            quality_status = 'info'
+        else:
+            quality_status = 'ok'
+
+        source_summary['quality_status'] = quality_status
+        source_summary['issue_count'] = (
+            source_summary['error_count']
+            + source_summary['warning_count']
+            + source_summary['info_count']
+        )
+        source_summary['issues'] = sorted(
+            source_summary['issues'].values(),
+            key=lambda item: (-item['count'], item['severity'], item['code']),
+        )
+        summary['sources'].append(source_summary)
+
+    summary['sources'] = sorted(
+        summary['sources'],
+        key=lambda item: (-item['error_count'], -item['warning_count'], -item['info_count'], item['source_name']),
+    )
+    return summary
+
+
+def _post_crawler_source(post) -> tuple[int | None, str] | None:
+    crawl_items = getattr(post, 'crawl_items', None)
+    if crawl_items is not None:
+        all_items = crawl_items.all()
+        for item in all_items:
+            run = getattr(item, 'run', None)
+            source = getattr(run, 'source', None)
+            if source is not None:
+                return source.id, source.name
+
+    site = (getattr(post, 'site', '') or '').strip()
+    if site:
+        return None, site
+    return None

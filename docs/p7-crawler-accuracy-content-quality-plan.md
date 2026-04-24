@@ -82,15 +82,24 @@ Implementation record:
 
 ## P7-4. Source-Level Quality Metrics
 
-Status: planned
+Status: completed
 
 Objective:
 - Show which crawler sources are producing low-quality output over time.
 
-Candidate scope:
-- Aggregate quality issue counts by source/site.
-- Add admin-only quality metrics to crawler operations.
-- Identify sources with repeated short content, missing date, or enrichment gaps.
+Scope:
+- Aggregate recent quality issue counts by crawler source.
+- Include source quality summaries in the admin-only crawler metrics endpoint.
+- Surface quality error/warning alerts alongside existing reliability alerts.
+- Display source quality status in the admin crawler dashboard.
+
+Acceptance criteria:
+- Completed: source rows show recent quality status and issue counts.
+- Completed: quality findings use the same audit contract as `audit_crawler_quality`.
+- Completed: sources with quality errors or warnings are included in operator alerts.
+
+Implementation record:
+- [p7-4-source-quality-metrics-implementation.md](/C:/project/Codex/Crawler/docs/p7-4-source-quality-metrics-implementation.md)
 
 ## P7-5. Remediation Flow
 
@@ -117,3 +126,6 @@ Candidate scope:
 - `python backend/manage.py test api.tests.CrawlRunTrackingTests.test_low_quality_items_are_filtered_before_post_creation --keepdb`
 - `python backend/manage.py test api.tests.CrawlRunTrackingTests api.tests.CrawlerQualityAuditTests --keepdb`
 - `npm run lint` from `frontend/`
+- `python -m py_compile backend/api/crawler_quality.py backend/api/crawler_views.py backend/api/tests.py`
+- `python backend/manage.py test api.tests.CrawlRunTrackingTests.test_crawler_metrics_endpoint_returns_source_quality_summaries api.tests.CrawlRunTrackingTests.test_crawler_metrics_endpoint_returns_period_and_source_summaries --keepdb`
+- `npm run build` from `frontend/`
