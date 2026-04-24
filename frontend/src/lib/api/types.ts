@@ -331,12 +331,22 @@ export interface CrawlerSourceMetric {
     last_run_at: string | null;
 }
 
+export interface CrawlerReliabilityAlert {
+    source_id: number;
+    source_name: string;
+    severity: 'warning' | 'error';
+    category: 'stale_running' | 'high_failure_rate' | 'no_recent_success' | 'high_item_error_rate';
+    title: string;
+    message: string;
+}
+
 export interface CrawlerMetrics {
     periods: {
         '24h': CrawlerMetricPeriod;
         '7d': CrawlerMetricPeriod;
     };
     sources: CrawlerSourceMetric[];
+    alerts: CrawlerReliabilityAlert[];
 }
 
 export interface CrawlerPreviewItem {

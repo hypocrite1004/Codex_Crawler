@@ -269,6 +269,33 @@ class CrawlRunTrackingTests(APITestCase):
         self.assertEqual(response.data['periods']['7d']['error_count'], 1)
         self.assertEqual(response.data['sources'][0]['source_id'], self.source.id)
         self.assertEqual(response.data['sources'][0]['recent_runs'], 2)
+        self.assertIn('alerts', response.data)
+
+    def test_crawler_metrics_endpoint_returns_reliability_alerts(self):
+        now = timezone.now()
+        for index in range(3):
+            CrawlRun.objects.create(
+                source=self.source,
+                triggered_by='scheduled',
+                status='error',
+                started_at=now - timedelta(hours=index),
+                finished_at=now - timedelta(hours=index),
+                articles_found=2,
+                articles_created=0,
+                duplicate_count=0,
+                filtered_count=0,
+                error_count=2,
+                duration_seconds=2,
+                error_message='RSS fetch failed: connection timeout',
+            )
+
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get('/api/crawler-runs/metrics/')
+
+        self.assertEqual(response.status_code, 200)
+        alert_categories = {alert['category'] for alert in response.data['alerts']}
+        self.assertIn('high_failure_rate', alert_categories)
+        self.assertIn('high_item_error_rate', alert_categories)
 
     @patch('api.crawler._send_telegram_notifications')
     @patch('api.embeddings.get_embedding', return_value=None)

@@ -324,6 +324,21 @@ function CollectionMetrics({ metrics }: { metrics: CrawlerMetrics | null }) {
                 <CollectionMetric title="7d Created" value={week.articles_created} helper={`${week.duplicate_count} duplicate`} />
                 <CollectionMetric title="7d Filtered" value={week.filtered_count} helper={`${week.error_count} item errors`} />
             </div>
+            {metrics.alerts.length > 0 && (
+                <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ color: 'var(--text-primary)', fontWeight: 800, marginBottom: '0.5rem' }}>Reliability Alerts</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.6rem' }}>
+                        {metrics.alerts.slice(0, 4).map((alert) => (
+                            <div key={`${alert.source_id}-${alert.category}`} style={{ padding: '0.75rem 0.85rem', borderRadius: 8, background: alert.severity === 'error' ? 'rgba(127,29,29,0.25)' : 'rgba(113,63,18,0.25)', border: `1px solid ${alert.severity === 'error' ? 'rgba(248,113,113,0.35)' : 'rgba(251,191,36,0.35)'}` }}>
+                                <div style={{ color: alert.severity === 'error' ? '#fca5a5' : '#fde68a', fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase' }}>{alert.severity}</div>
+                                <div style={{ color: 'var(--text-primary)', fontWeight: 800, marginTop: '0.2rem' }}>{alert.title}</div>
+                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.74rem', marginTop: '0.2rem' }}>{alert.source_name}</div>
+                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '0.35rem', lineHeight: 1.45 }}>{alert.message}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
             {!metrics.sources.length ? (
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>No source run metrics in the last 7 days.</div>
             ) : (

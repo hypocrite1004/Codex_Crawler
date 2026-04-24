@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.db.models import Count, Max, Q, Sum
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -96,9 +97,11 @@ class CrawlerRunViewSet(viewsets.ReadOnlyModelViewSet):
             '24h': self._summarize_period(now - timedelta(hours=24)),
             '7d': self._summarize_period(now - timedelta(days=7)),
         }
+        since_7d = now - timedelta(days=7)
         return Response({
             'periods': periods,
-            'sources': self._summarize_sources(now - timedelta(days=7)),
+            'sources': self._summarize_sources(since_7d),
+            'alerts': self._summarize_alerts(now, since_7d),
         })
 
     @action(detail=True, methods=['get'])
@@ -169,3 +172,57 @@ class CrawlerRunViewSet(viewsets.ReadOnlyModelViewSet):
                 'last_run_at': source.last_run_at.isoformat() if source.last_run_at else None,
             })
         return result
+
+    def _summarize_alerts(self, now, since):
+        stale_cutoff = now - timedelta(minutes=max(10, int(getattr(settings, 'CRAWLER_STALE_RUN_MINUTES', 120))))
+        sources = (
+            CrawlerSource.objects
+            .annotate(
+                recent_runs=Count('runs', filter=Q(runs__started_at__gte=since)),
+                successful_runs=Count('runs', filter=Q(runs__started_at__gte=since, runs__status__in=['success', 'playwright_fallback'])),
+                failed_runs=Count('runs', filter=Q(runs__started_at__gte=since, runs__status='error')),
+                articles_created=Sum('runs__articles_created', filter=Q(runs__started_at__gte=since)),
+                duplicate_count=Sum('runs__duplicate_count', filter=Q(runs__started_at__gte=since)),
+                filtered_count=Sum('runs__filtered_count', filter=Q(runs__started_at__gte=since)),
+                item_errors=Sum('runs__error_count', filter=Q(runs__started_at__gte=since)),
+            )
+            .order_by('name')
+        )
+        alerts = []
+        for source in sources:
+            recent_runs = source.recent_runs or 0
+            successful_runs = source.successful_runs or 0
+            failed_runs = source.failed_runs or 0
+            item_errors = source.item_errors or 0
+            item_total = (
+                (source.articles_created or 0)
+                + (source.duplicate_count or 0)
+                + (source.filtered_count or 0)
+                + item_errors
+            )
+
+            if source.is_running and (
+                source.last_run_started_at is None or source.last_run_started_at < stale_cutoff
+            ):
+                alerts.append(self._alert(source, 'error', 'stale_running', 'Crawler run may be stuck', 'The source has been running longer than the stale lock timeout. Recovery will mark it failed before the next run.'))
+
+            if recent_runs >= 3 and failed_runs / recent_runs >= 0.5:
+                alerts.append(self._alert(source, 'error', 'high_failure_rate', 'High failure rate', f'{failed_runs}/{recent_runs} runs failed in the last 7 days.'))
+            elif recent_runs > 0 and successful_runs == 0:
+                alerts.append(self._alert(source, 'warning', 'no_recent_success', 'No recent successful runs', 'The source has run recently but has no successful run in the last 7 days.'))
+
+            if item_total >= 4 and item_errors / item_total >= 0.25:
+                alerts.append(self._alert(source, 'warning', 'high_item_error_rate', 'High item error rate', f'{item_errors}/{item_total} recorded items failed in the last 7 days.'))
+
+        severity_order = {'error': 0, 'warning': 1}
+        return sorted(alerts, key=lambda alert: (severity_order.get(alert['severity'], 2), alert['source_name'], alert['category']))[:12]
+
+    def _alert(self, source, severity, category, title, message):
+        return {
+            'source_id': source.id,
+            'source_name': source.name,
+            'severity': severity,
+            'category': category,
+            'title': title,
+            'message': message,
+        }

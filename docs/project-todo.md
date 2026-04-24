@@ -536,13 +536,16 @@ P1 시작 조건:
 - [p5-3-crawler-retry-policy-implementation.md](/C:/project/Codex/Crawler/docs/p5-3-crawler-retry-policy-implementation.md)
 
 ### P5-4. 운영 경보
-- [ ] 오래 지속되는 running 상태 경고
-- [ ] 최근 실패율 급증 source 표시
-- [ ] 장기간 성공 run 없는 source 표시
-- [ ] item error rate 높은 source 표시
+- [x] 오래 지속되는 running 상태 경고
+- [x] 최근 실패율 급증 source 표시
+- [x] 장기간 성공 run 없는 source 표시
+- [x] item error rate 높은 source 표시
 
 우선순위:
 - `중상`
+
+구현 문서:
+- [p5-4-crawler-reliability-alerts-implementation.md](/C:/project/Codex/Crawler/docs/p5-4-crawler-reliability-alerts-implementation.md)
 
 ### P5-5. 안정성 테스트 보강
 - [ ] stale lock recovery 테스트 확대
@@ -568,7 +571,8 @@ P1 시작 조건:
 - [x] `P5-1 실행 lock/상태 복구` 완료
 - [x] `P5-2 저장 일관성 검증` 완료
 - [x] `P5-3 재시도/auto-disable 정책 고도화` 완료
-- [ ] `P5-4 운영 경보` 착수
+- [x] `P5-4 운영 경보` 완료
+- [ ] `P5-5 안정성 테스트 보강` 착수
 - [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료

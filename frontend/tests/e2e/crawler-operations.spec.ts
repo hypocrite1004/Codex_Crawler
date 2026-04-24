@@ -36,6 +36,8 @@ test('admin can filter crawler sources by operational state', async ({ page }) =
   await page.goto('/admin/crawler');
 
   await expect(page.getByText('Collection Status')).toBeVisible();
+  await expect(page.getByText('Reliability Alerts')).toBeVisible();
+  await expect(page.getByText('High failure rate')).toBeVisible();
   await expect(page.getByText('7d success')).toBeVisible();
   await expect(page.getByText('Showing')).toBeVisible();
   await page.getByLabel('Search crawler sources').fill('E2E Crawler Diagnostics');

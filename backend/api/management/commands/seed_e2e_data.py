@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
@@ -281,5 +282,53 @@ class Command(BaseCommand):
                 title=item['title'],
                 defaults=item,
             )
+
+        alert_source, _ = CrawlerSource.objects.update_or_create(
+            name='E2E High Failure Source',
+            defaults={
+                'url': 'https://example.com/e2e-failing-feed.xml',
+                'source_type': 'rss',
+                'is_active': True,
+                'category': news,
+                'crawl_interval': 60,
+                'last_crawled_at': now,
+                'last_success_at': None,
+                'last_run_started_at': now,
+                'last_status': 'error',
+                'last_error_message': 'RSS fetch failed: connection timeout',
+                'consecutive_failures': 3,
+                'max_retries': 2,
+                'retry_backoff_minutes': 10,
+                'auto_disable_after_failures': 5,
+            },
+        )
+        CrawlRun.objects.filter(source=alert_source).delete()
+        CrawlerLog.objects.filter(source=alert_source).delete()
+        for index in range(3):
+            CrawlRun.objects.create(
+                source=alert_source,
+                triggered_by='scheduled',
+                status='error',
+                started_at=now - timedelta(hours=index),
+                finished_at=now - timedelta(hours=index),
+                attempt_count=1,
+                articles_found=2,
+                articles_created=0,
+                duplicate_count=0,
+                filtered_count=0,
+                error_count=2,
+                duration_seconds=2,
+                error_message='RSS fetch failed: connection timeout',
+            )
+        CrawlerLog.objects.create(
+            source=alert_source,
+            status='error',
+            articles_found=2,
+            articles_created=0,
+            error_message='RSS fetch failed: connection timeout',
+            triggered_by='scheduled',
+            attempt_count=1,
+            duration_seconds=2,
+        )
 
         self.stdout.write(self.style.SUCCESS('E2E seed data prepared.'))

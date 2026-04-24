@@ -68,16 +68,24 @@ Implementation record:
 
 ## P5-4. Operator Reliability Alerts
 
-Status: planned
+Status: completed
 
 Objective:
 - Surface reliability warnings before operators need to inspect individual runs.
 
 Scope:
-- Flag long-running stale candidates.
-- Flag high recent failure rate.
-- Flag sources with no successful run over a configured window.
-- Flag high item error rate.
+- Flagged long-running stale candidates.
+- Flagged high recent failure rate.
+- Flagged sources with no successful run over a configured window.
+- Flagged high item error rate.
+
+Acceptance criteria:
+- Completed: metrics API returns reliability alerts.
+- Completed: admin crawler page displays reliability alert cards.
+- Completed: backend and E2E coverage verify alert visibility.
+
+Implementation record:
+- [p5-4-crawler-reliability-alerts-implementation.md](/C:/project/Codex/Crawler/docs/p5-4-crawler-reliability-alerts-implementation.md)
 
 ## P5-5. Reliability Test Expansion
 
