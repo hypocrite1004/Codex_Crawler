@@ -682,7 +682,7 @@ Verification:
 ## 2026-04-24 P7 Current Status
 - [x] P7-1 Crawler quality contract completed.
 - [x] P7-2 Recent crawler quality audit completed.
-- [ ] P7-3 Storage quality guardrails planned.
+- [x] P7-3 Storage quality guardrails completed.
 - [ ] P7-4 Source-level quality metrics planned.
 - [ ] P7-5 Remediation flow planned.
 
@@ -691,6 +691,7 @@ Plan:
 
 Implementation records:
 - [p7-1-p7-2-crawler-quality-audit-implementation.md](/C:/project/Codex/Crawler/docs/p7-1-p7-2-crawler-quality-audit-implementation.md)
+- [p7-3-storage-quality-guardrails-implementation.md](/C:/project/Codex/Crawler/docs/p7-3-storage-quality-guardrails-implementation.md)
 
 Verification:
 - [x] `python -m py_compile backend/api/crawler_quality.py backend/api/management/commands/audit_crawler_quality.py backend/api/management/commands/seed_e2e_data.py backend/api/tests.py`
@@ -698,5 +699,9 @@ Verification:
 - [x] `python backend/manage.py seed_e2e_data`
 - [x] `python backend/manage.py audit_crawler_quality --days 30 --limit 5`
 - [x] `python backend/manage.py check`
-- [x] `python backend/manage.py test api.tests --keepdb` (58 tests)
+- [x] `python backend/manage.py test api.tests --keepdb` (59 tests)
 - [x] `npm run lint`
+- [x] `python -m py_compile backend/api/crawler_persistence.py backend/api/crawler_diagnostics.py backend/api/tests.py`
+- [x] `python backend/manage.py test api.tests.CrawlRunTrackingTests.test_low_quality_items_are_filtered_before_post_creation --keepdb`
+- [x] `python backend/manage.py test api.tests.CrawlRunTrackingTests api.tests.CrawlerQualityAuditTests --keepdb`
+- [x] `npm run lint` from `frontend/`

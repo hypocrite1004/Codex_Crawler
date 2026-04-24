@@ -93,6 +93,58 @@ class CrawlRunTrackingTests(APITestCase):
     @patch('api.crawler._send_telegram_notifications')
     @patch('api.embeddings.get_embedding', return_value=None)
     @patch('api.crawler.crawl_rss')
+    def test_low_quality_items_are_filtered_before_post_creation(self, mock_crawl_rss, _mock_embedding, _mock_notify):
+        Post.objects.create(
+            title='Existing Post',
+            content='existing content',
+            source_url='https://example.com/existing',
+            author=self.user,
+        )
+        mock_crawl_rss.return_value = ([
+            {
+                'url': 'https://example.com/existing',
+                'title': '',
+                'content': '',
+            },
+            {
+                'url': 'https://example.com/missing-title',
+                'title': '',
+                'content': 'valid body that should not be stored without a title',
+            },
+            {
+                'url': 'https://example.com/missing-content',
+                'title': 'Missing Content',
+                'content': '<p>   </p>',
+            },
+            {
+                'url': 'https://example.com/valid-short',
+                'title': 'Valid Short Content',
+                'content': 'short but non-empty',
+            },
+        ], 'success')
+
+        result = run_crawl(self.source, triggered_by='manual')
+
+        self.assertEqual(result['status'], 'success')
+        crawl_run = CrawlRun.objects.get(id=result['run_id'])
+        self.assertEqual(crawl_run.articles_found, 4)
+        self.assertEqual(crawl_run.articles_created, 1)
+        self.assertEqual(crawl_run.duplicate_count, 1)
+        self.assertEqual(crawl_run.filtered_count, 2)
+        self.assertEqual(crawl_run.error_count, 0)
+
+        self.assertFalse(Post.objects.filter(source_url='https://example.com/missing-title').exists())
+        self.assertFalse(Post.objects.filter(source_url='https://example.com/missing-content').exists())
+        self.assertTrue(Post.objects.filter(source_url='https://example.com/valid-short').exists())
+
+        error_messages = list(crawl_run.items.filter(item_status='filtered').values_list('error_message', flat=True))
+        self.assertIn('Missing title', error_messages)
+        self.assertIn('Missing content', error_messages)
+        self.assertTrue(crawl_run.items.filter(item_status='duplicate', source_url='https://example.com/existing').exists())
+
+    @patch('api.crawler._send_telegram_notifications')
+    @patch('api.embeddings.get_embedding', return_value=None)
+    @patch('api.crawler.crawl_rss')
     def test_run_crawl_extracts_cves_for_new_posts(self, mock_crawl_rss, _mock_embedding, _mock_notify):
         mock_crawl_rss.return_value = ([{
             'url': 'https://example.com/cve-news',

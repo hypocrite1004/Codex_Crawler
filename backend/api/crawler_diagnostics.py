@@ -71,6 +71,8 @@ def categorize_error(message: str) -> str:
         return 'network_error'
     if any(term in text for term in ['selector', 'parse', 'no item', 'no article', 'article list', 'link selector']):
         return 'selector_mismatch'
+    if 'missing title' in text or 'missing content' in text:
+        return 'selector_mismatch'
     if 'missing source url' in text or 'missing url' in text:
         return 'missing_url'
     if 'duplicate source url' in text or 'duplicate key' in text:

@@ -61,15 +61,24 @@ Implementation record:
 
 ## P7-3. Storage Quality Guardrails
 
-Status: planned
+Status: completed
 
 Objective:
 - Prevent avoidable low-quality crawler outputs from being stored as normal published posts.
 
-Candidate scope:
-- Decide which audit findings should block persistence versus only warn.
-- Consider filtering empty content and missing URL at the fetch/persistence boundary.
-- Consider preserving low-quality items as `CrawlItem(filtered/error)` evidence instead of published posts.
+Scope:
+- Missing title and fallback placeholder title are filtered before post creation.
+- Empty content after HTML stripping is filtered before post creation.
+- Filtered low-quality items are preserved as `CrawlItem(filtered)` evidence.
+- Warning-only audit findings remain non-blocking until source-level metrics and remediation thresholds exist.
+
+Acceptance criteria:
+- Completed: low-quality crawler items with missing title or empty content are not stored as posts.
+- Completed: filtered item evidence is visible through crawl item records.
+- Completed: duplicate URL detection still takes precedence over quality filtering.
+
+Implementation record:
+- [p7-3-storage-quality-guardrails-implementation.md](/C:/project/Codex/Crawler/docs/p7-3-storage-quality-guardrails-implementation.md)
 
 ## P7-4. Source-Level Quality Metrics
 
@@ -104,3 +113,7 @@ Candidate scope:
 - `python backend/manage.py check`
 - `python backend/manage.py test api.tests --keepdb`
 - `npm run lint`
+- `python -m py_compile backend/api/crawler_persistence.py backend/api/crawler_diagnostics.py backend/api/tests.py`
+- `python backend/manage.py test api.tests.CrawlRunTrackingTests.test_low_quality_items_are_filtered_before_post_creation --keepdb`
+- `python backend/manage.py test api.tests.CrawlRunTrackingTests api.tests.CrawlerQualityAuditTests --keepdb`
+- `npm run lint` from `frontend/`

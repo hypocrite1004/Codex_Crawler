@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from django.db import IntegrityError, models, transaction
+from django.utils.html import strip_tags
 from django.utils import timezone
 
 from .cve_sync import sync_post_cve_mentions
@@ -56,6 +57,22 @@ def normalize_source_url(url: str) -> str:
     return urlunparse((scheme, netloc, path, '', query, ''))
 
 
+FALLBACK_TITLES = {'(no title)', '(제목 없음)'}
+
+
+def _plain_text(value: str | None) -> str:
+    return ' '.join(strip_tags(value or '').split())
+
+
+def _storage_filter_reason(item: dict) -> str:
+    title = (item.get('title') or '').strip()
+    if not title or title.lower() in FALLBACK_TITLES:
+        return 'Missing title'
+    if not _plain_text(item.get('content')):
+        return 'Missing content'
+    return ''
+
+
 def _record_crawl_item(run, item_status: str, item: dict, post=None, error_message: str = ''):
     from .models import CrawlItem
     raw_url = item.get('url', '') or ''
@@ -106,6 +123,13 @@ def _persist_crawled_items(source, items: list[dict], system_user, get_embedding
             result['duplicate_count'] += 1
             if crawl_run is not None:
                 record_item_fn(crawl_run, 'duplicate', item, error_message='Duplicate source URL')
+            continue
+
+        filter_reason = _storage_filter_reason(item)
+        if filter_reason:
+            result['filtered_count'] += 1
+            if crawl_run is not None:
+                record_item_fn(crawl_run, 'filtered', item, error_message=filter_reason)
             continue
 
         title = item.get('title') or '(No title)'
@@ -187,6 +211,12 @@ def _persist_crawled_items_with_run(source, items: list[dict], system_user, get_
                 if Post.objects.filter(models.Q(normalized_source_url=normalized_url) | models.Q(source_url=url)).exists():
                     duplicate_detected = True
                 else:
+                    filter_reason = _storage_filter_reason(item)
+                    if filter_reason:
+                        record_item_fn(crawl_run, 'filtered', item, error_message=filter_reason)
+                        result['filtered_count'] += 1
+                        continue
+
                     title = item.get('title') or '(제목 없음)'
                     content = item.get('content', '')
                     vector = get_embedding(f"{title}\n{content}")
