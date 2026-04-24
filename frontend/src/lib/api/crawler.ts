@@ -1,5 +1,5 @@
 import { API_URL, fetchWithAuth, getHeaders, logout } from './core';
-import type { CrawlItem, CrawlerLog, CrawlerPreviewItem, CrawlerRun, CrawlerSource } from './types';
+import type { CrawlItem, CrawlerLog, CrawlerMetrics, CrawlerPreviewItem, CrawlerRun, CrawlerSource } from './types';
 
 export async function fetchCrawlerSources(): Promise<CrawlerSource[]> {
     try {
@@ -81,6 +81,12 @@ export async function fetchCrawlerRuns(sourceId?: number): Promise<CrawlerRun[]>
 export async function fetchCrawlerRunItems(runId: number): Promise<CrawlItem[]> {
     const res = await fetchWithAuth(`${API_URL}/crawler-runs/${runId}/items/`, { headers: getHeaders() });
     if (!res.ok) throw new Error('Failed to fetch crawler run items');
+    return res.json();
+}
+
+export async function fetchCrawlerMetrics(): Promise<CrawlerMetrics> {
+    const res = await fetchWithAuth(`${API_URL}/crawler-runs/metrics/`, { headers: getHeaders() });
+    if (!res.ok) throw new Error('Failed to fetch crawler metrics');
     return res.json();
 }
 

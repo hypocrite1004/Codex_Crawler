@@ -175,6 +175,97 @@ class CrawlRunTrackingTests(APITestCase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]['item_status'], 'created')
         self.assertEqual(response.data[0]['title'], 'Created Item')
+        self.assertEqual(response.data[0]['diagnostic_category'], 'ok')
+
+    def test_run_and_item_endpoints_include_operator_diagnostics(self):
+        crawl_run = CrawlRun.objects.create(
+            source=self.source,
+            triggered_by='scheduled',
+            status='error',
+            error_message='feed unavailable',
+            articles_found=3,
+            duplicate_count=1,
+            filtered_count=1,
+            error_count=1,
+        )
+        CrawlItem.objects.create(
+            run=crawl_run,
+            item_status='duplicate',
+            source_url='https://example.com/duplicate',
+            normalized_url='https://example.com/duplicate',
+            title='Duplicate Item',
+            error_message='Duplicate source URL',
+            payload={'title': 'Duplicate Item'},
+        )
+        CrawlItem.objects.create(
+            run=crawl_run,
+            item_status='filtered',
+            title='Filtered Item',
+            error_message='Missing source URL',
+            payload={'title': 'Filtered Item'},
+        )
+        CrawlItem.objects.create(
+            run=crawl_run,
+            item_status='error',
+            source_url='https://example.com/error',
+            normalized_url='https://example.com/error',
+            title='Error Item',
+            error_message='Item persistence failed',
+            payload={'title': 'Error Item'},
+        )
+
+        self.client.force_authenticate(user=self.staff)
+        run_response = self.client.get(f'/api/crawler-runs/{crawl_run.id}/')
+        item_response = self.client.get(f'/api/crawler-runs/{crawl_run.id}/items/')
+
+        self.assertEqual(run_response.status_code, 200)
+        self.assertEqual(run_response.data['diagnostic_category'], 'network_error')
+        self.assertEqual(item_response.status_code, 200)
+        categories = {item['title']: item['diagnostic_category'] for item in item_response.data}
+        self.assertEqual(categories['Duplicate Item'], 'duplicate_url')
+        self.assertEqual(categories['Filtered Item'], 'missing_url')
+        self.assertEqual(categories['Error Item'], 'persistence_error')
+
+    def test_crawler_metrics_endpoint_returns_period_and_source_summaries(self):
+        now = timezone.now()
+        CrawlRun.objects.create(
+            source=self.source,
+            triggered_by='manual',
+            status='success',
+            started_at=now,
+            finished_at=now,
+            articles_found=4,
+            articles_created=2,
+            duplicate_count=1,
+            filtered_count=1,
+            error_count=0,
+            duration_seconds=5,
+        )
+        CrawlRun.objects.create(
+            source=self.source,
+            triggered_by='scheduled',
+            status='error',
+            started_at=now,
+            finished_at=now,
+            articles_found=1,
+            articles_created=0,
+            duplicate_count=0,
+            filtered_count=0,
+            error_count=1,
+            duration_seconds=2,
+        )
+
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get('/api/crawler-runs/metrics/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['periods']['24h']['total_runs'], 2)
+        self.assertEqual(response.data['periods']['24h']['successful_runs'], 1)
+        self.assertEqual(response.data['periods']['24h']['failed_runs'], 1)
+        self.assertEqual(response.data['periods']['24h']['articles_created'], 2)
+        self.assertEqual(response.data['periods']['7d']['error_count'], 1)
+        self.assertEqual(response.data['sources'][0]['source_id'], self.source.id)
+        self.assertEqual(response.data['sources'][0]['recent_runs'], 2)
 
     @patch('api.crawler._send_telegram_notifications')
     @patch('api.embeddings.get_embedding', return_value=None)

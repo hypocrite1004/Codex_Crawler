@@ -283,6 +283,9 @@ export interface CrawlerRun {
     duration_seconds: number;
     error_message: string;
     item_count: number;
+    diagnostic_category: string;
+    diagnostic_label: string;
+    diagnostic_hint: string;
 }
 
 export interface CrawlItem {
@@ -295,6 +298,45 @@ export interface CrawlItem {
     payload: Record<string, unknown>;
     post_id: number | null;
     created_at: string;
+    diagnostic_category: string;
+    diagnostic_label: string;
+    diagnostic_hint: string;
+}
+
+export interface CrawlerMetricPeriod {
+    since: string;
+    total_runs: number;
+    successful_runs: number;
+    failed_runs: number;
+    running_runs: number;
+    success_rate: number;
+    articles_found: number;
+    articles_created: number;
+    duplicate_count: number;
+    filtered_count: number;
+    error_count: number;
+    duration_seconds: number;
+}
+
+export interface CrawlerSourceMetric {
+    source_id: number;
+    source_name: string;
+    health_status: CrawlerSource['health_status'];
+    recent_runs: number;
+    successful_runs: number;
+    failed_runs: number;
+    success_rate: number;
+    articles_created: number;
+    item_errors: number;
+    last_run_at: string | null;
+}
+
+export interface CrawlerMetrics {
+    periods: {
+        '24h': CrawlerMetricPeriod;
+        '7d': CrawlerMetricPeriod;
+    };
+    sources: CrawlerSourceMetric[];
 }
 
 export interface CrawlerPreviewItem {

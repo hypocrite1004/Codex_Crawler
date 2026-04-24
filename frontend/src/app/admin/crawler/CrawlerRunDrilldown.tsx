@@ -18,6 +18,21 @@ const ITEM_META: Record<CrawlItem['item_status'], { label: string; color: string
   error: { label: 'Error', color: '#ef4444' },
 };
 
+const DIAGNOSTIC_COLORS: Record<string, string> = {
+  ok: '#10b981',
+  running: '#3b82f6',
+  fallback: '#f59e0b',
+  partial_item_errors: '#f97316',
+  blocked_source: '#ef4444',
+  network_error: '#ef4444',
+  selector_mismatch: '#f59e0b',
+  missing_url: '#94a3b8',
+  duplicate_url: '#f59e0b',
+  persistence_error: '#ef4444',
+  auto_disabled: '#f97316',
+  unknown_error: '#ef4444',
+};
+
 function Badge({ text, color }: { text: string; color: string }) {
   return <span style={{ padding: '0.16rem 0.48rem', borderRadius: 999, color, background: `${color}1f`, border: `1px solid ${color}40`, fontSize: '0.72rem', fontWeight: 700 }}>{text}</span>;
 }
@@ -156,10 +171,12 @@ export function CrawlerRunDrilldown({ sourceId, preferredRunId }: { sourceId: nu
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <Badge text={RUN_META[selectedRun.status].label} color={RUN_META[selectedRun.status].color} />
               <Badge text={selectedRun.triggered_by === 'scheduled' ? 'Scheduled' : 'Manual'} color={selectedRun.triggered_by === 'scheduled' ? '#0ea5e9' : '#8b5cf6'} />
+              <Badge text={selectedRun.diagnostic_label} color={DIAGNOSTIC_COLORS[selectedRun.diagnostic_category] || '#94a3b8'} />
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>Run #{selectedRun.id}</span>
             </div>
             <div style={{ color: 'var(--text-primary)', fontWeight: 700, marginTop: '0.45rem' }}>{fmt(selectedRun.started_at)}</div>
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginTop: '0.2rem' }}>finished {fmt(selectedRun.finished_at)}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem', marginTop: '0.35rem', lineHeight: 1.5 }}>{selectedRun.diagnostic_hint}</div>
           </div>
           <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>{selectedRun.duration_seconds}s · attempts {selectedRun.attempt_count}</div>
         </div>
@@ -197,9 +214,13 @@ export function CrawlerRunDrilldown({ sourceId, preferredRunId }: { sourceId: nu
                       <div key={item.id} style={{ padding: '0.7rem 0.75rem', borderTop: '1px solid var(--glass-border)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
                           <div style={{ color: 'var(--text-primary)', fontSize: '0.82rem', fontWeight: 700, minWidth: 0 }}>{itemTitle(item)}</div>
-                          {item.post_id && <Link href={`/posts/${item.post_id}`} style={{ color: 'var(--accent-primary)', fontSize: '0.78rem' }}>Open post</Link>}
+                          <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <Badge text={item.diagnostic_label} color={DIAGNOSTIC_COLORS[item.diagnostic_category] || ITEM_META[item.item_status].color} />
+                            {item.post_id && <Link href={`/posts/${item.post_id}`} style={{ color: 'var(--accent-primary)', fontSize: '0.78rem' }}>Open post</Link>}
+                          </div>
                         </div>
                         {item.source_url && <a href={item.source_url} target="_blank" rel="noreferrer" style={{ display: 'block', marginTop: '0.25rem', color: 'var(--accent-primary)', fontSize: '0.74rem', wordBreak: 'break-all' }}>{item.source_url}</a>}
+                        <div style={{ marginTop: '0.35rem', color: 'var(--text-secondary)', fontSize: '0.74rem' }}>{item.diagnostic_hint}</div>
                         {item.error_message && <div style={{ marginTop: '0.35rem', color: '#fca5a5', fontSize: '0.76rem' }}>{item.error_message}</div>}
                       </div>
                     ))}

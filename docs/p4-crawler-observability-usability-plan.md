@@ -65,7 +65,7 @@ Implementation record:
 
 ## P4-3. Crawler Result Diagnostics
 
-Status: planned
+Status: completed
 
 Objective:
 - Make failed or suspicious collection results actionable.
@@ -82,12 +82,15 @@ Scope:
   - item persistence error
 
 Acceptance criteria:
-- Operators can distinguish between "site unreachable", "selector extracted zero usable items", and "items existed but were filtered or duplicated".
-- Backend tests cover at least the main error category mappings.
+- Completed: operators can distinguish between "site unreachable", "selector extracted zero usable items", and "items existed but were filtered or duplicated".
+- Completed: backend tests cover the main run/item diagnostic mappings.
+
+Implementation record:
+- [p4-3-p4-4-crawler-diagnostics-and-metrics-implementation.md](/C:/project/Codex/Crawler/docs/p4-3-p4-4-crawler-diagnostics-and-metrics-implementation.md)
 
 ## P4-4. Collection Status Metrics
 
-Status: planned
+Status: completed
 
 Objective:
 - Show whether collection is healthy over time.
@@ -105,12 +108,15 @@ Scope:
 - Keep the initial implementation admin-only.
 
 Acceptance criteria:
-- Admin can see whether the crawler is collecting more, less, or failing more than usual.
-- Metrics are derived from `CrawlRun` and `CrawlItem`, not inferred from posts alone.
+- Completed: admins can see 24h/7d collection volume and failure counts.
+- Completed: metrics are derived from `CrawlRun` and `CrawlItem`, not inferred from posts alone.
+
+Implementation record:
+- [p4-3-p4-4-crawler-diagnostics-and-metrics-implementation.md](/C:/project/Codex/Crawler/docs/p4-3-p4-4-crawler-diagnostics-and-metrics-implementation.md)
 
 ## P4-5. E2E Coverage for Crawler Operations
 
-Status: planned
+Status: completed
 
 Objective:
 - Lock the new operator flow with browser-level regression coverage.
@@ -122,8 +128,8 @@ Scope:
 - Verify created item link behavior.
 
 Acceptance criteria:
-- `npm run test:e2e` includes crawler operations coverage.
-- Existing E2E tests remain passing.
+- Completed: `npm run test:e2e` includes crawler operations coverage.
+- Completed: existing E2E tests remain passing.
 
 ## Recommended Order
 

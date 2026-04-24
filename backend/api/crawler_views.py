@@ -1,4 +1,7 @@
-from django.db.models import Count
+from datetime import timedelta
+
+from django.db.models import Count, Max, Q, Sum
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -86,8 +89,83 @@ class CrawlerRunViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(source_id=source_id)
         return queryset
 
+    @action(detail=False, methods=['get'])
+    def metrics(self, request):
+        now = timezone.now()
+        periods = {
+            '24h': self._summarize_period(now - timedelta(hours=24)),
+            '7d': self._summarize_period(now - timedelta(days=7)),
+        }
+        return Response({
+            'periods': periods,
+            'sources': self._summarize_sources(now - timedelta(days=7)),
+        })
+
     @action(detail=True, methods=['get'])
     def items(self, request, pk=None):
         crawl_run = self.get_object()
         items = crawl_run.items.select_related('post').all()
         return Response(CrawlItemSerializer(items, many=True).data)
+
+    def _summarize_period(self, since):
+        queryset = CrawlRun.objects.filter(started_at__gte=since)
+        aggregate = queryset.aggregate(
+            total_runs=Count('id'),
+            successful_runs=Count('id', filter=Q(status__in=['success', 'playwright_fallback'])),
+            failed_runs=Count('id', filter=Q(status='error')),
+            running_runs=Count('id', filter=Q(status='running')),
+            articles_found=Sum('articles_found'),
+            articles_created=Sum('articles_created'),
+            duplicate_count=Sum('duplicate_count'),
+            filtered_count=Sum('filtered_count'),
+            error_count=Sum('error_count'),
+            duration_seconds=Sum('duration_seconds'),
+        )
+        total_runs = aggregate['total_runs'] or 0
+        successful_runs = aggregate['successful_runs'] or 0
+        return {
+            'since': since.isoformat(),
+            'total_runs': total_runs,
+            'successful_runs': successful_runs,
+            'failed_runs': aggregate['failed_runs'] or 0,
+            'running_runs': aggregate['running_runs'] or 0,
+            'success_rate': round((successful_runs / total_runs) * 100, 1) if total_runs else 0,
+            'articles_found': aggregate['articles_found'] or 0,
+            'articles_created': aggregate['articles_created'] or 0,
+            'duplicate_count': aggregate['duplicate_count'] or 0,
+            'filtered_count': aggregate['filtered_count'] or 0,
+            'error_count': aggregate['error_count'] or 0,
+            'duration_seconds': aggregate['duration_seconds'] or 0,
+        }
+
+    def _summarize_sources(self, since):
+        sources = (
+            CrawlerSource.objects
+            .annotate(
+                recent_runs=Count('runs', filter=Q(runs__started_at__gte=since)),
+                successful_runs=Count('runs', filter=Q(runs__started_at__gte=since, runs__status__in=['success', 'playwright_fallback'])),
+                failed_runs=Count('runs', filter=Q(runs__started_at__gte=since, runs__status='error')),
+                articles_created=Sum('runs__articles_created', filter=Q(runs__started_at__gte=since)),
+                item_errors=Sum('runs__error_count', filter=Q(runs__started_at__gte=since)),
+                last_run_at=Max('runs__started_at'),
+            )
+            .filter(recent_runs__gt=0)
+            .order_by('-failed_runs', '-recent_runs', 'name')[:12]
+        )
+        result = []
+        for source in sources:
+            recent_runs = source.recent_runs or 0
+            successful_runs = source.successful_runs or 0
+            result.append({
+                'source_id': source.id,
+                'source_name': source.name,
+                'health_status': source.health_status(),
+                'recent_runs': recent_runs,
+                'successful_runs': successful_runs,
+                'failed_runs': source.failed_runs or 0,
+                'success_rate': round((successful_runs / recent_runs) * 100, 1) if recent_runs else 0,
+                'articles_created': source.articles_created or 0,
+                'item_errors': source.item_errors or 0,
+                'last_run_at': source.last_run_at.isoformat() if source.last_run_at else None,
+            })
+        return result

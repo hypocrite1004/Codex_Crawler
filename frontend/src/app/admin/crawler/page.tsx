@@ -10,6 +10,7 @@ import {
     createCrawlerSource,
     deleteCrawlerSource,
     fetchCategories,
+    fetchCrawlerMetrics,
     fetchCrawlerSources,
     fetchProfile,
     getErrorMessage,
@@ -17,6 +18,7 @@ import {
     runCrawl,
     updateCrawlerSource,
     type Category,
+    type CrawlerMetrics,
     type CrawlerPreviewItem,
     type CrawlerSource,
 } from '@/lib/api';
@@ -299,10 +301,71 @@ function Summary({ title, value, helper }: { title: string; value: number; helpe
     return <div className="glass-panel" style={{ padding: '1rem 1.1rem' }}><div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>{title}</div><div style={{ marginTop: '0.35rem', color: 'var(--text-primary)', fontSize: '1.65rem', fontWeight: 800 }}>{value}</div><div style={{ marginTop: '0.25rem', color: 'var(--text-secondary)', fontSize: '0.76rem' }}>{helper}</div></div>;
 }
 
+function CollectionMetrics({ metrics }: { metrics: CrawlerMetrics | null }) {
+    if (!metrics) return null;
+    const day = metrics.periods['24h'];
+    const week = metrics.periods['7d'];
+    return (
+        <div className="glass-panel" style={{ padding: '1rem 1.2rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
+                <div>
+                    <div style={{ color: 'var(--text-primary)', fontWeight: 800 }}>Collection Status</div>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginTop: '0.25rem' }}>Run and item totals are derived from CrawlRun and CrawlItem records.</div>
+                </div>
+                <div style={{ color: week.failed_runs ? '#fca5a5' : '#86efac', fontSize: '0.82rem', fontWeight: 700 }}>
+                    7d success {week.success_rate}%
+                </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.7rem', marginBottom: '1rem' }}>
+                <CollectionMetric title="24h Runs" value={day.total_runs} helper={`${day.failed_runs} failed`} />
+                <CollectionMetric title="24h Created" value={day.articles_created} helper={`${day.duplicate_count} duplicate`} />
+                <CollectionMetric title="24h Filtered" value={day.filtered_count} helper={`${day.error_count} item errors`} />
+                <CollectionMetric title="7d Runs" value={week.total_runs} helper={`${week.failed_runs} failed`} />
+                <CollectionMetric title="7d Created" value={week.articles_created} helper={`${week.duplicate_count} duplicate`} />
+                <CollectionMetric title="7d Filtered" value={week.filtered_count} helper={`${week.error_count} item errors`} />
+            </div>
+            {!metrics.sources.length ? (
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>No source run metrics in the last 7 days.</div>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                    {metrics.sources.slice(0, 6).map((source) => (
+                        <div key={source.source_id} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) repeat(5, minmax(72px, auto))', gap: '0.7rem', alignItems: 'center', padding: '0.65rem 0.75rem', borderRadius: 8, background: 'rgba(0,0,0,0.18)', border: '1px solid var(--glass-border)' }}>
+                            <div style={{ minWidth: 0 }}>
+                                <div style={{ color: 'var(--text-primary)', fontSize: '0.82rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{source.source_name}</div>
+                                <div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem' }}>last {fmt(source.last_run_at)}</div>
+                            </div>
+                            <MetricCell label="Runs" value={source.recent_runs} />
+                            <MetricCell label="Success" value={`${source.success_rate}%`} />
+                            <MetricCell label="Failed" value={source.failed_runs} />
+                            <MetricCell label="Created" value={source.articles_created} />
+                            <MetricCell label="Errors" value={source.item_errors} />
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CollectionMetric({ title, value, helper }: { title: string; value: number; helper: string }) {
+    return (
+        <div style={{ padding: '0.8rem 0.85rem', borderRadius: 8, background: 'rgba(0,0,0,0.18)', border: '1px solid var(--glass-border)' }}>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem' }}>{title}</div>
+            <div style={{ marginTop: '0.25rem', color: 'var(--text-primary)', fontWeight: 800 }}>{value}</div>
+            <div style={{ marginTop: '0.2rem', color: 'var(--text-secondary)', fontSize: '0.68rem' }}>{helper}</div>
+        </div>
+    );
+}
+
+function MetricCell({ label, value }: { label: string; value: number | string }) {
+    return <div><div style={{ color: 'var(--text-secondary)', fontSize: '0.68rem' }}>{label}</div><div style={{ color: 'var(--text-primary)', fontSize: '0.78rem', fontWeight: 800 }}>{value}</div></div>;
+}
+
 export default function CrawlerSourcesPage() {
     const router = useRouter();
     const [sources, setSources] = useState<CrawlerSource[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
+    const [metrics, setMetrics] = useState<CrawlerMetrics | null>(null);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [form, setForm] = useState<CrawlerForm>(EMPTY_FORM);
@@ -322,9 +385,10 @@ export default function CrawlerSourcesPage() {
             try {
                 const user = await fetchProfile();
                 if (!user.is_superuser) { router.push('/'); return; }
-                const [sourceData, categoryData] = await Promise.all([fetchCrawlerSources(), fetchCategories()]);
+                const [sourceData, categoryData, metricsData] = await Promise.all([fetchCrawlerSources(), fetchCategories(), fetchCrawlerMetrics()]);
                 setSources(sourceData);
                 setCategories(categoryData);
+                setMetrics(metricsData);
             } catch {
                 router.push('/login');
             } finally {
@@ -334,7 +398,11 @@ export default function CrawlerSourcesPage() {
         void init();
     }, [router]);
 
-    const refresh = async () => setSources(await fetchCrawlerSources());
+    const refresh = async () => {
+        const [sourceData, metricsData] = await Promise.all([fetchCrawlerSources(), fetchCrawlerMetrics()]);
+        setSources(sourceData);
+        setMetrics(metricsData);
+    };
     const openNew = () => { setForm({ ...EMPTY_FORM }); setShowForm(true); };
     const openEdit = (s: CrawlerSource) => { setForm({ id: s.id, name: s.name, url: s.url, source_type: s.source_type, is_active: s.is_active, category: s.category, crawl_interval: s.crawl_interval, max_retries: s.max_retries, retry_backoff_minutes: s.retry_backoff_minutes, auto_disable_after_failures: s.auto_disable_after_failures, http_method: s.http_method, request_headers: s.request_headers, request_body: s.request_body, article_list_selector: s.article_list_selector, article_link_selector: s.article_link_selector, title_selector: s.title_selector, content_selector: s.content_selector, date_selector: s.date_selector, fetch_full_content: s.fetch_full_content, full_content_selector: s.full_content_selector, exclude_selectors: s.exclude_selectors }); setShowForm(true); };
 
@@ -430,6 +498,8 @@ export default function CrawlerSourcesPage() {
                 <Summary title="Attention" value={attention} helper="warning or error" />
             </div>
 
+            <CollectionMetrics metrics={metrics} />
+
             <div className="glass-panel" style={{ padding: '1rem 1.2rem', marginBottom: '1rem' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.5fr) repeat(4, minmax(140px, 1fr)) auto', gap: '0.75rem', alignItems: 'end' }}>
                     <div>
@@ -499,7 +569,7 @@ export default function CrawlerSourcesPage() {
                 {filteredSources.map((source) => {
                     const health = HEALTH[source.health_status];
                     return (
-                        <div key={source.id} className="glass-panel" style={{ padding: '1.2rem 1.4rem' }}>
+                        <div key={source.id} data-testid="crawler-source-card" className="glass-panel" style={{ padding: '1.2rem 1.4rem' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.45rem' }}>

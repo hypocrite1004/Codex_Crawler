@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.utils.html import strip_tags
+from .crawler_diagnostics import categorize_item, categorize_run, diagnostic_detail
 from .crawler_security import CrawlerSecurityError, validate_crawler_request_config
 from .models import (
     Post,
@@ -276,6 +277,9 @@ class CrawlerLogSerializer(serializers.ModelSerializer):
 
 class CrawlItemSerializer(serializers.ModelSerializer):
     post_id = serializers.IntegerField(source='post.id', read_only=True)
+    diagnostic_category = serializers.SerializerMethodField()
+    diagnostic_label = serializers.SerializerMethodField()
+    diagnostic_hint = serializers.SerializerMethodField()
 
     class Meta:
         model = CrawlItem
@@ -289,13 +293,31 @@ class CrawlItemSerializer(serializers.ModelSerializer):
             'payload',
             'post_id',
             'created_at',
+            'diagnostic_category',
+            'diagnostic_label',
+            'diagnostic_hint',
         ]
         read_only_fields = fields
+
+    def _diagnostic(self, obj):
+        return diagnostic_detail(categorize_item(obj))
+
+    def get_diagnostic_category(self, obj):
+        return self._diagnostic(obj)['diagnostic_category']
+
+    def get_diagnostic_label(self, obj):
+        return self._diagnostic(obj)['diagnostic_label']
+
+    def get_diagnostic_hint(self, obj):
+        return self._diagnostic(obj)['diagnostic_hint']
 
 
 class CrawlRunSerializer(serializers.ModelSerializer):
     source_name = serializers.CharField(source='source.name', read_only=True)
     item_count = serializers.SerializerMethodField()
+    diagnostic_category = serializers.SerializerMethodField()
+    diagnostic_label = serializers.SerializerMethodField()
+    diagnostic_hint = serializers.SerializerMethodField()
 
     class Meta:
         model = CrawlRun
@@ -316,6 +338,9 @@ class CrawlRunSerializer(serializers.ModelSerializer):
             'duration_seconds',
             'error_message',
             'item_count',
+            'diagnostic_category',
+            'diagnostic_label',
+            'diagnostic_hint',
         ]
         read_only_fields = fields
 
@@ -324,6 +349,18 @@ class CrawlRunSerializer(serializers.ModelSerializer):
         if annotated_count is not None:
             return annotated_count
         return obj.items.count()
+
+    def _diagnostic(self, obj):
+        return diagnostic_detail(categorize_run(obj))
+
+    def get_diagnostic_category(self, obj):
+        return self._diagnostic(obj)['diagnostic_category']
+
+    def get_diagnostic_label(self, obj):
+        return self._diagnostic(obj)['diagnostic_label']
+
+    def get_diagnostic_hint(self, obj):
+        return self._diagnostic(obj)['diagnostic_hint']
 
 
 class CrawlerSourceSerializer(serializers.ModelSerializer):

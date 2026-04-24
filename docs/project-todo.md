@@ -461,26 +461,33 @@ P1 시작 조건:
 - [p4-2-crawl-run-drilldown-implementation.md](/C:/project/Codex/Crawler/docs/p4-2-crawl-run-drilldown-implementation.md)
 
 ### P4-3. 크롤러 결과 진단 개선
-- [ ] 운영자용 오류 카테고리 정리
-- [ ] 네트워크/보안 차단/selector mismatch/중복/필터링/저장 실패 구분
-- [ ] run/item 상세 화면에서 원인 확인 가능하게 정리
+- [x] 운영자용 오류 카테고리 정리
+- [x] 네트워크/보안 차단/selector mismatch/중복/필터링/저장 실패 구분
+- [x] run/item 상세 화면에서 원인 확인 가능하게 정리
 
 우선순위:
 - `높음`
 
+구현 문서:
+- [p4-3-p4-4-crawler-diagnostics-and-metrics-implementation.md](/C:/project/Codex/Crawler/docs/p4-3-p4-4-crawler-diagnostics-and-metrics-implementation.md)
+
 ### P4-4. 수집 현황 메트릭
-- [ ] 24h/7d run status 요약
-- [ ] created/duplicate/filtered/error item 요약
-- [ ] source별 최근 성공률 또는 실패 추세 표시
+- [x] 24h/7d run status 요약
+- [x] created/duplicate/filtered/error item 요약
+- [x] source별 최근 성공률 또는 실패 추세 표시
 
 우선순위:
 - `중상`
+
+구현 문서:
+- [p4-3-p4-4-crawler-diagnostics-and-metrics-implementation.md](/C:/project/Codex/Crawler/docs/p4-3-p4-4-crawler-diagnostics-and-metrics-implementation.md)
 
 ### P4-5. 크롤러 운영 E2E 보강
 - [x] crawler source/run/item seed 보강
 - [x] 운영 화면 필터/정렬 E2E 추가
 - [x] run 상세 드릴다운 E2E 추가
 - [x] created item post link E2E 추가
+- [x] 진단 배지/수집 현황 메트릭 E2E 추가
 
 우선순위:
 - `중상`
@@ -494,7 +501,9 @@ P1 시작 조건:
 - [x] `P3-6 인증 구조 고도화 검토` 완료
 - [x] `P4-2 Crawl Run 상세 드릴다운` 완료
 - [x] `P4-1 크롤러 운영 화면 개선` 완료
-- [ ] `P4-3 크롤러 결과 진단 개선` 착수
+- [x] `P4-3 크롤러 결과 진단 개선` 완료
+- [x] `P4-4 수집 현황 메트릭` 완료
+- [x] `P4-5 크롤러 운영 E2E 보강` 완료
 - [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료
