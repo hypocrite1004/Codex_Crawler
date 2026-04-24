@@ -7,6 +7,7 @@ from django.db import models
 from django.utils import timezone
 
 from .crawler_fetchers import crawl_html, crawl_rss
+from .crawler_diagnostics import is_retryable_crawler_error
 from .crawler_notifications import _send_telegram_notifications
 from . import crawler_persistence as persistence
 from .crawler_preview import _SourceProxy, preview_crawl
@@ -277,10 +278,12 @@ def run_crawl(source, triggered_by: str = 'manual') -> dict:
                 last_status = 'error'
                 logger.exception(f"[Crawler] crawl failed ({source.name}) attempt={attempt}/{max_attempts}: {exc}")
 
-                if retry_enabled and attempt < max_attempts:
+                if retry_enabled and attempt < max_attempts and is_retryable_crawler_error(last_error):
                     backoff_seconds = max(0, int(source.retry_backoff_minutes or 0)) * 60 * attempt
                     if backoff_seconds:
                         time.sleep(backoff_seconds)
+                else:
+                    break
 
         finished_at = timezone.now()
         duration_seconds = max(0, int(time.monotonic() - started_at))

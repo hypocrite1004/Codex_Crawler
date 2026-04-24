@@ -80,6 +80,10 @@ def categorize_error(message: str) -> str:
     return 'unknown_error'
 
 
+def is_retryable_crawler_error(message: str) -> bool:
+    return categorize_error(message) in {'network_error', 'unknown_error'}
+
+
 def categorize_run(run) -> str:
     if run.status == 'running':
         return 'running'

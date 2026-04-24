@@ -48,15 +48,23 @@ Implementation record:
 
 ## P5-3. Retry and Auto-disable Policy Hardening
 
-Status: planned
+Status: completed
 
 Objective:
 - Make retry behavior safer by treating transient network failures differently from deterministic configuration/selector failures.
 
 Scope:
-- Clarify retryable vs non-retryable diagnostics.
-- Avoid repeated retries for blocked configuration or selector mismatch.
-- Make auto-disable reasons easier to inspect.
+- Clarified retryable vs non-retryable diagnostics.
+- Avoided repeated retries for deterministic selector/configuration-like failures.
+- Preserved scheduled crawl single-attempt behavior.
+
+Acceptance criteria:
+- Completed: network/unclassified errors remain retryable for manual runs.
+- Completed: selector mismatch errors do not retry.
+- Completed: scheduled crawls remain single-attempt.
+
+Implementation record:
+- [p5-3-crawler-retry-policy-implementation.md](/C:/project/Codex/Crawler/docs/p5-3-crawler-retry-policy-implementation.md)
 
 ## P5-4. Operator Reliability Alerts
 

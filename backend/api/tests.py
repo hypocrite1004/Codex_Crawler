@@ -695,6 +695,27 @@ class CrawlRunTrackingTests(APITestCase):
         mock_sleep.assert_called_once_with(60)
 
     @patch('api.crawler.time.sleep', return_value=None)
+    @patch('api.crawler.crawl_rss', side_effect=ValueError('article list selector matched no items'))
+    def test_manual_run_does_not_retry_non_retryable_selector_errors(self, _mock_crawl_rss, mock_sleep):
+        self.source.max_retries = 2
+        self.source.retry_backoff_minutes = 1
+        self.source.save(update_fields=['max_retries', 'retry_backoff_minutes'])
+
+        result = run_crawl(self.source, triggered_by='manual')
+
+        self.assertEqual(result['status'], 'error')
+        self.assertEqual(result['attempt_count'], 1)
+        self.source.refresh_from_db()
+        self.assertEqual(self.source.consecutive_failures, 1)
+        self.assertTrue(self.source.is_active)
+
+        crawl_run = CrawlRun.objects.get(id=result['run_id'])
+        self.assertEqual(crawl_run.status, 'error')
+        self.assertEqual(crawl_run.attempt_count, 1)
+        self.assertIn('selector', crawl_run.error_message)
+        mock_sleep.assert_not_called()
+
+    @patch('api.crawler.time.sleep', return_value=None)
     @patch('api.crawler._ensure_system_user')
     @patch('api.crawler._persist_crawled_items_with_run')
     @patch('api.crawler.crawl_rss')

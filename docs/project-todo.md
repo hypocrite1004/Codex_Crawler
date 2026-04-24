@@ -525,12 +525,15 @@ P1 시작 조건:
 - [p5-2-crawler-persistence-consistency-implementation.md](/C:/project/Codex/Crawler/docs/p5-2-crawler-persistence-consistency-implementation.md)
 
 ### P5-3. 재시도/auto-disable 정책 고도화
-- [ ] retryable/non-retryable 실패 유형 정리
-- [ ] blocked config/selector mismatch 반복 재시도 억제
-- [ ] auto-disable 원인과 복구 흐름 운영 화면에서 확인 가능하게 정리
+- [x] retryable/non-retryable 실패 유형 정리
+- [x] blocked config/selector mismatch 반복 재시도 억제
+- [x] auto-disable 원인과 복구 흐름 운영 화면에서 확인 가능하게 정리
 
 우선순위:
 - `중상`
+
+구현 문서:
+- [p5-3-crawler-retry-policy-implementation.md](/C:/project/Codex/Crawler/docs/p5-3-crawler-retry-policy-implementation.md)
 
 ### P5-4. 운영 경보
 - [ ] 오래 지속되는 running 상태 경고
@@ -564,7 +567,8 @@ P1 시작 조건:
 - [x] `P4-5 크롤러 운영 E2E 보강` 완료
 - [x] `P5-1 실행 lock/상태 복구` 완료
 - [x] `P5-2 저장 일관성 검증` 완료
-- [ ] `P5-3 재시도/auto-disable 정책 고도화` 착수
+- [x] `P5-3 재시도/auto-disable 정책 고도화` 완료
+- [ ] `P5-4 운영 경보` 착수
 - [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료
