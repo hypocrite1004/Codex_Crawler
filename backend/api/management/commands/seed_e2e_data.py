@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from api.crawler_persistence import normalize_source_url
 from api.models import Category, Comment, CrawlItem, CrawlerLog, CrawlerSource, CrawlRun, CveRecord, Post, PostCveMention
 
 
@@ -67,11 +68,17 @@ class Command(BaseCommand):
         published_with_summary, _ = Post.objects.update_or_create(
             title='E2E Published News With Summary',
             defaults={
-                'content': '<p>E2E published content with summary and IOC 198.51.100.77.</p>',
+                'content': (
+                    '<p>E2E published content with summary and IOC 198.51.100.77. '
+                    'This seeded article intentionally has enough body text for crawler quality audit checks. '
+                    'It describes a security advisory, affected software, mitigation guidance, and related detection context. '
+                    'Operators can use it as deterministic public discovery content during Playwright tests.</p>'
+                ),
                 'category': news,
                 'author': author,
                 'site': 'E2E Source',
                 'source_url': 'https://example.com/e2e-published-with-summary',
+                'normalized_source_url': normalize_source_url('https://example.com/e2e-published-with-summary'),
                 'is_shared': True,
                 'is_summarized': True,
                 'summary': json.dumps({

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import User
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db import IntegrityError
 from django.test import override_settings
 from django.utils import timezone
@@ -639,6 +640,7 @@ class CrawlRunTrackingTests(APITestCase):
         self.assertEqual(CrawlerLog.objects.filter(source=self.source, status='error').count(), 1)
         self.assertEqual(CrawlerLog.objects.filter(source=self.source, status='success').count(), 1)
 
+
     @override_settings(CRAWLER_STALE_RUN_MINUTES=60)
     @patch('api.management.commands.run_crawler_scheduler.run_crawl', return_value={
         'status': 'success',
@@ -822,6 +824,105 @@ class CrawlRunTrackingTests(APITestCase):
         self.assertEqual(crawl_run.articles_created, 0)
         self.assertEqual(crawl_run.error_count, 1)
         self.assertTrue(CrawlItem.objects.filter(run=crawl_run, item_status='error').exists())
+
+
+class CrawlerQualityAuditTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='quality-user',
+            email='quality-user@example.com',
+            password='password123',
+        )
+        self.category = Category.objects.create(name='news')
+        self.source = CrawlerSource.objects.create(
+            name='Quality Feed',
+            url='https://example.com/quality.xml',
+            source_type='rss',
+            category=self.category,
+        )
+        self.run = CrawlRun.objects.create(
+            source=self.source,
+            triggered_by='manual',
+            status='success',
+            started_at=timezone.now(),
+            finished_at=timezone.now(),
+        )
+
+    def test_audit_crawler_quality_reports_public_content_quality_issues(self):
+        good_post = Post.objects.create(
+            title='Good crawler post',
+            content=' '.join(['validated crawler content'] * 20),
+            author=self.user,
+            category=self.category,
+            status='published',
+            is_draft=False,
+            source_url='https://example.com/good?utm_source=test',
+            normalized_source_url='https://example.com/good',
+            published_at=timezone.now(),
+            iocs=['198.51.100.11'],
+        )
+        short_post = Post.objects.create(
+            title='Short crawler post',
+            content='<p>short</p>',
+            author=self.user,
+            category=self.category,
+            status='published',
+            is_draft=False,
+            source_url='https://example.com/short?utm_source=test',
+            normalized_source_url='',
+        )
+        CrawlItem.objects.create(
+            run=self.run,
+            post=good_post,
+            item_status='created',
+            source_url=good_post.source_url,
+            normalized_url=good_post.normalized_source_url,
+            title=good_post.title,
+            payload={},
+        )
+        CrawlItem.objects.create(
+            run=self.run,
+            post=short_post,
+            item_status='created',
+            source_url=short_post.source_url,
+            normalized_url='',
+            title=short_post.title,
+            payload={},
+        )
+
+        stdout = StringIO()
+        call_command('audit_crawler_quality', days=30, stdout=stdout)
+
+        output = stdout.getvalue()
+        self.assertIn('Posts checked: 2', output)
+        self.assertIn('short_content', output)
+        self.assertIn('missing_normalized_source_url', output)
+        self.assertIn('missing_published_at', output)
+        self.assertIn('missing_security_context', output)
+
+    def test_audit_crawler_quality_can_fail_on_error(self):
+        bad_post = Post.objects.create(
+            title='(No title)',
+            content='',
+            author=self.user,
+            category=self.category,
+            status='published',
+            is_draft=False,
+            source_url='https://example.com/bad',
+            normalized_source_url='https://example.com/bad',
+        )
+        CrawlItem.objects.create(
+            run=self.run,
+            post=bad_post,
+            item_status='created',
+            source_url=bad_post.source_url,
+            normalized_url=bad_post.normalized_source_url,
+            title=bad_post.title,
+            payload={},
+        )
+
+        with self.assertRaises(CommandError):
+            call_command('audit_crawler_quality', days=30, fail_on_error=True, stdout=StringIO())
 
 
 class PostWorkflowTests(APITestCase):
