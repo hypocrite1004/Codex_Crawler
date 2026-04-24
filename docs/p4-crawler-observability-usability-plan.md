@@ -23,21 +23,24 @@ The admin crawler page already shows source cards, health badges, last run metad
 
 ## P4-1. Crawler Operations Dashboard Refresh
 
-Status: planned
+Status: completed
 
 Objective:
 - Make the admin crawler page useful as an operations console, not only a source list.
 
 Scope:
-- Add stronger top-level summary metrics.
-- Highlight sources requiring attention.
-- Add filters for health, source type, active state, and search text.
-- Sort sources by attention priority, due status, and latest run time.
+- Added stronger top-level summary metrics.
+- Highlighted sources requiring attention through summary counts and attention-first sorting.
+- Added filters for health, source type, active state, and search text.
+- Added sorting by attention priority, due status, latest run time, and name.
 
 Acceptance criteria:
-- An admin can identify broken or stale sources within one screen.
-- Sources with recent failures, auto-disabled state, or overdue runs are visually prioritized.
-- Existing source CRUD and manual run behavior remains intact.
+- Completed: an admin can identify broken, due, paused, running, and healthy sources within one screen.
+- Completed: sources with failures, disabled state, fallback state, running state, or overdue run time are prioritized by attention sorting.
+- Completed: existing source CRUD, logs, run drilldown, preview, and manual run behavior remain intact.
+
+Implementation record:
+- [p4-1-crawler-operations-dashboard-implementation.md](/C:/project/Codex/Crawler/docs/p4-1-crawler-operations-dashboard-implementation.md)
 
 ## P4-2. Crawl Run Detail Drilldown
 

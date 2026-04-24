@@ -45,6 +45,11 @@ type CrawlerForm = {
     exclude_selectors: string;
 };
 
+type HealthFilter = 'all' | 'attention' | 'due' | CrawlerSource['health_status'];
+type ActiveFilter = 'all' | 'active' | 'paused';
+type SourceTypeFilter = 'all' | CrawlerSource['source_type'];
+type SortKey = 'attention' | 'due' | 'latest' | 'name';
+
 const EMPTY_FORM: CrawlerForm = {
     name: '',
     url: '',
@@ -100,6 +105,51 @@ function fmt(date: string | null | undefined) {
 
 function due(date: string | null) {
     return Boolean(date && new Date(date).getTime() <= Date.now());
+}
+
+function timestamp(date: string | null | undefined) {
+    return date ? new Date(date).getTime() : 0;
+}
+
+function attentionScore(source: CrawlerSource) {
+    if (source.is_running) return 90;
+    if (source.health_status === 'disabled') return 80;
+    if (source.health_status === 'error') return 70;
+    if (source.health_status === 'warning') return 60;
+    if (source.is_active && due(source.next_crawl_at)) return 50;
+    if (source.health_status === 'pending') return 40;
+    if (source.health_status === 'paused') return 30;
+    return 0;
+}
+
+function matchesHealthFilter(source: CrawlerSource, filter: HealthFilter) {
+    if (filter === 'all') return true;
+    if (filter === 'attention') return attentionScore(source) >= 50;
+    if (filter === 'due') return source.is_active && due(source.next_crawl_at);
+    return source.health_status === filter;
+}
+
+function matchesActiveFilter(source: CrawlerSource, filter: ActiveFilter) {
+    if (filter === 'all') return true;
+    if (filter === 'active') return source.is_active;
+    return !source.is_active;
+}
+
+function sortSources(sources: CrawlerSource[], sortKey: SortKey) {
+    return [...sources].sort((a, b) => {
+        if (sortKey === 'attention') {
+            return attentionScore(b) - attentionScore(a) || timestamp(b.last_crawled_at) - timestamp(a.last_crawled_at);
+        }
+        if (sortKey === 'due') {
+            const aDue = a.is_active && due(a.next_crawl_at) ? 1 : 0;
+            const bDue = b.is_active && due(b.next_crawl_at) ? 1 : 0;
+            return bDue - aDue || timestamp(a.next_crawl_at) - timestamp(b.next_crawl_at);
+        }
+        if (sortKey === 'latest') {
+            return timestamp(b.last_crawled_at) - timestamp(a.last_crawled_at);
+        }
+        return a.name.localeCompare(b.name);
+    });
 }
 
 function payload(form: CrawlerForm) {
@@ -261,6 +311,11 @@ export default function CrawlerSourcesPage() {
     const [expandedLogs, setExpandedLogs] = useState<number | null>(null);
     const [expandedRuns, setExpandedRuns] = useState<number | null>(null);
     const [preferredRunIds, setPreferredRunIds] = useState<Record<number, number>>({});
+    const [searchText, setSearchText] = useState('');
+    const [healthFilter, setHealthFilter] = useState<HealthFilter>('all');
+    const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all');
+    const [sourceTypeFilter, setSourceTypeFilter] = useState<SourceTypeFilter>('all');
+    const [sortKey, setSortKey] = useState<SortKey>('attention');
 
     useEffect(() => {
         const init = async () => {
@@ -332,6 +387,30 @@ export default function CrawlerSourcesPage() {
     const running = sources.filter((s) => s.is_running).length;
     const healthy = sources.filter((s) => s.health_status === 'healthy').length;
     const attention = sources.filter((s) => ['warning', 'error', 'disabled'].includes(s.health_status)).length;
+    const dueNow = sources.filter((s) => s.is_active && due(s.next_crawl_at)).length;
+    const failed = sources.filter((s) => s.health_status === 'error').length;
+    const paused = sources.filter((s) => !s.is_active).length;
+    const query = searchText.trim().toLowerCase();
+    const filteredSources = sortSources(
+        sources.filter((source) => {
+            const searchable = `${source.name} ${source.url} ${source.category_name || ''}`.toLowerCase();
+            return (
+                (!query || searchable.includes(query))
+                && matchesHealthFilter(source, healthFilter)
+                && matchesActiveFilter(source, activeFilter)
+                && (sourceTypeFilter === 'all' || source.source_type === sourceTypeFilter)
+            );
+        }),
+        sortKey,
+    );
+    const hasActiveFilters = Boolean(query) || healthFilter !== 'all' || activeFilter !== 'all' || sourceTypeFilter !== 'all' || sortKey !== 'attention';
+    const resetFilters = () => {
+        setSearchText('');
+        setHealthFilter('all');
+        setActiveFilter('all');
+        setSourceTypeFilter('all');
+        setSortKey('attention');
+    };
 
     return (
         <div className="container" style={{ maxWidth: 1180, margin: '40px auto', padding: '0 1rem 4rem' }}>
@@ -340,12 +419,75 @@ export default function CrawlerSourcesPage() {
                 <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}><button className="btn btn-outline" onClick={() => void refresh()}>Refresh</button><button className="btn btn-primary" onClick={openNew}>Add Source</button></div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.9rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.9rem', marginBottom: '1.5rem' }}>
                 <Summary title="Total" value={sources.length} helper="all sources" />
                 <Summary title="Active" value={active} helper="scheduler enabled" />
                 <Summary title="Running" value={running} helper="lock protected" />
+                <Summary title="Due Now" value={dueNow} helper="ready to run" />
                 <Summary title="Healthy" value={healthy} helper="last run success" />
+                <Summary title="Failed" value={failed} helper="last run error" />
+                <Summary title="Paused" value={paused} helper="scheduler off" />
                 <Summary title="Attention" value={attention} helper="warning or error" />
+            </div>
+
+            <div className="glass-panel" style={{ padding: '1rem 1.2rem', marginBottom: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.5fr) repeat(4, minmax(140px, 1fr)) auto', gap: '0.75rem', alignItems: 'end' }}>
+                    <div>
+                        <div style={{ marginBottom: 6, color: 'var(--text-secondary)', fontSize: '0.78rem' }}>Search</div>
+                        <input
+                            aria-label="Search crawler sources"
+                            value={searchText}
+                            onChange={(event) => setSearchText(event.target.value)}
+                            placeholder="Name, URL, category"
+                            style={{ width: '100%', padding: '0.65rem 0.75rem', borderRadius: 8, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', boxSizing: 'border-box' }}
+                        />
+                    </div>
+                    <div>
+                        <div style={{ marginBottom: 6, color: 'var(--text-secondary)', fontSize: '0.78rem' }}>Health</div>
+                        <select aria-label="Health filter" value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as HealthFilter)} style={{ width: '100%', padding: '0.65rem 0.75rem', borderRadius: 8, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}>
+                            <option value="all">All health</option>
+                            <option value="attention">Needs attention</option>
+                            <option value="due">Due now</option>
+                            <option value="healthy">Healthy</option>
+                            <option value="warning">Fallback</option>
+                            <option value="error">Error</option>
+                            <option value="running">Running</option>
+                            <option value="paused">Paused</option>
+                            <option value="disabled">Disabled</option>
+                            <option value="pending">Pending</option>
+                            <option value="idle">Idle</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div style={{ marginBottom: 6, color: 'var(--text-secondary)', fontSize: '0.78rem' }}>Scheduler</div>
+                        <select aria-label="Scheduler filter" value={activeFilter} onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)} style={{ width: '100%', padding: '0.65rem 0.75rem', borderRadius: 8, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}>
+                            <option value="all">All states</option>
+                            <option value="active">Active only</option>
+                            <option value="paused">Paused only</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div style={{ marginBottom: 6, color: 'var(--text-secondary)', fontSize: '0.78rem' }}>Type</div>
+                        <select aria-label="Source type filter" value={sourceTypeFilter} onChange={(event) => setSourceTypeFilter(event.target.value as SourceTypeFilter)} style={{ width: '100%', padding: '0.65rem 0.75rem', borderRadius: 8, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}>
+                            <option value="all">All types</option>
+                            <option value="rss">RSS / Atom</option>
+                            <option value="html">HTML</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div style={{ marginBottom: 6, color: 'var(--text-secondary)', fontSize: '0.78rem' }}>Sort</div>
+                        <select aria-label="Crawler sort" value={sortKey} onChange={(event) => setSortKey(event.target.value as SortKey)} style={{ width: '100%', padding: '0.65rem 0.75rem', borderRadius: 8, background: 'rgba(0,0,0,0.28)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)' }}>
+                            <option value="attention">Attention first</option>
+                            <option value="due">Due first</option>
+                            <option value="latest">Latest run</option>
+                            <option value="name">Name</option>
+                        </select>
+                    </div>
+                    <button className="btn btn-outline" onClick={resetFilters} disabled={!hasActiveFilters}>Reset</button>
+                </div>
+                <div style={{ marginTop: '0.8rem', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+                    Showing {filteredSources.length} of {sources.length} sources.
+                </div>
             </div>
 
             <div className="glass-panel" style={{ padding: '1rem 1.2rem', marginBottom: '1.5rem' }}>
@@ -353,8 +495,8 @@ export default function CrawlerSourcesPage() {
                 <code style={{ color: 'var(--accent-primary)', fontSize: '0.84rem' }}>python backend/manage.py run_crawler_scheduler --poll-seconds 60</code>
             </div>
 
-            {!sources.length ? <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No crawler sources.</div> : <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {sources.map((source) => {
+            {!sources.length ? <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No crawler sources.</div> : filteredSources.length === 0 ? <div className="glass-panel" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>No sources match the current filters.</div> : <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {filteredSources.map((source) => {
                     const health = HEALTH[source.health_status];
                     return (
                         <div key={source.id} className="glass-panel" style={{ padding: '1.2rem 1.4rem' }}>

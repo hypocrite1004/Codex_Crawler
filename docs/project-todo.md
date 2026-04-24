@@ -437,12 +437,15 @@ P1 시작 조건:
 - [p4-crawler-observability-usability-plan.md](/C:/project/Codex/Crawler/docs/p4-crawler-observability-usability-plan.md)
 
 ### P4-1. 크롤러 운영 화면 개선
-- [ ] 상단 수집/상태 요약 강화
-- [ ] health/source type/active/search 필터 추가
-- [ ] attention/due/latest run 기준 정렬
+- [x] 상단 수집/상태 요약 강화
+- [x] health/source type/active/search 필터 추가
+- [x] attention/due/latest run 기준 정렬
 
 우선순위:
 - `높음`
+
+구현 문서:
+- [p4-1-crawler-operations-dashboard-implementation.md](/C:/project/Codex/Crawler/docs/p4-1-crawler-operations-dashboard-implementation.md)
 
 ### P4-2. Crawl Run 상세 드릴다운
 - [x] run 목록/상세 조회 프론트 API 추가
@@ -475,7 +478,7 @@ P1 시작 조건:
 
 ### P4-5. 크롤러 운영 E2E 보강
 - [x] crawler source/run/item seed 보강
-- [ ] 운영 화면 필터/정렬 E2E 추가
+- [x] 운영 화면 필터/정렬 E2E 추가
 - [x] run 상세 드릴다운 E2E 추가
 - [x] created item post link E2E 추가
 
@@ -490,7 +493,8 @@ P1 시작 조건:
 - [x] `P3-5 프론트 대형 화면 추가 분해` 완료
 - [x] `P3-6 인증 구조 고도화 검토` 완료
 - [x] `P4-2 Crawl Run 상세 드릴다운` 완료
-- [ ] `P4-1 크롤러 운영 화면 개선` 착수
+- [x] `P4-1 크롤러 운영 화면 개선` 완료
+- [ ] `P4-3 크롤러 결과 진단 개선` 착수
 - [x] 이 문서를 기준 문서로 삼아 이후 진행 시 상태 갱신
 ## 2026-03-27 Update
 - [x] P0-3 정책 반영 구현 완료
